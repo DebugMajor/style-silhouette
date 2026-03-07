@@ -1,6 +1,6 @@
-🚀 Style-A-Silhouette
-📷 Camera-Based Smart Styling & Digital Wardrobe Assistant
-🌟 Project Overview
+Style-A-Silhouette
+Camera-Based Smart Styling & Digital Wardrobe Assistant
+Project Overview
 
 Style-A-Silhouette is a smart styling assistant that helps users evaluate and improve their outfit choices using camera input and intelligent feedback.
 
@@ -8,21 +8,21 @@ In Phase 1, the system captures a user’s image through the device camera, send
 
 The long-term vision is to build a complete AI-powered wardrobe system that can analyze clothing, recommend outfits, and help users manage their wardrobe digitally.
 
-🎯 Problem Statement
+Problem Statement
 
 Many people face common wardrobe problems:
 
-👕 Owning many clothes but struggling to choose an outfit
+Owning many clothes but struggling to choose an outfit
 
-🧠 Forgetting what items they already have in their wardrobe
+Forgetting what items they already have in their wardrobe
 
-🎨 Lacking feedback on outfit combinations
+Lacking feedback on outfit combinations
 
-👗 Difficulty visualizing how outfits look together
+Difficulty visualizing how outfits look together
 
 Style-A-Silhouette aims to solve this problem by combining camera input, intelligent feedback, and future AI capabilities to assist users in making better styling decisions.
 
-🧱 System Architecture
+System Architecture
 User Camera (Browser)
         ↓
 React Frontend (UI + Capture + Voice)
@@ -31,40 +31,40 @@ Node.js + Express Backend (Upload + Processing)
         ↓
 Future Integration
 AI / Computer Vision / Cloud Storage
-🛠 Tech Stack
-🎨 Frontend
+Tech Stack
+Frontend
 
-⚛ React (Vite) — Frontend framework
+React (Vite) — Frontend framework
 
-🟨 JavaScript (ES6+)
+JavaScript (ES6+)
 
-📷 Browser Camera API (getUserMedia) — Capture user images
+Browser Camera API (getUserMedia) — Capture user images
 
-🔊 Web Speech API — Convert text feedback into speech
+Web Speech API — Convert text feedback into speech
 
-🔗 Axios — Communication with backend APIs
+Axios — Communication with backend APIs
 
-⚙ Backend
+Backend
 
-🟢 Node.js — Server runtime
+Node.js — Server runtime
 
-🚂 Express.js — Backend framework
+Express.js — Backend framework
 
-📤 Multer — Image upload handling
+Multer — Image upload handling
 
-🌐 CORS — Enables frontend ↔ backend communication
+CORS — Enables frontend ↔ backend communication
 
-☁ Future Technologies (Planned)
+Future Technologies (Planned)
 
-🍃 MongoDB Atlas — Digital wardrobe database
+MongoDB Atlas — Digital wardrobe database
 
-☁ Cloudinary / AWS S3 — Image storage
+Cloudinary / AWS S3 — Image storage
 
-🧠 Python + OpenCV — Computer vision
+Python + OpenCV — Computer vision
 
-🤖 MediaPipe / TensorFlow — AI model integration
+MediaPipe / TensorFlow — AI model integration
 
-📂 Project Structure
+Project Structure
 style-silhouette/
 │
 ├── frontend/
@@ -88,7 +88,7 @@ style-silhouette/
 │   └── server.js
 │
 └── README.md
-👥 Team Development Workflow
+Team Development Workflow
 
 The project follows a Feature Branch Workflow to maintain organized development.
 
@@ -104,8 +104,8 @@ Example Feature Branches
 feature/camera-module
 feature/frontend-ui
 feature/backend-api
-🚀 Getting Started
-📌 Prerequisites
+Getting Started
+Prerequisites
 
 Install the following tools:
 
@@ -115,7 +115,7 @@ Git
 
 npm
 
-📌 Frontend Setup
+Frontend Setup
 cd frontend
 npm install
 npm run dev
@@ -123,7 +123,7 @@ npm run dev
 Frontend runs on:
 
 http://localhost:5173
-📌 Backend Setup
+Backend Setup
 cd backend
 npm install
 nodemon server.js
@@ -131,7 +131,7 @@ nodemon server.js
 Backend runs on:
 
 http://localhost:5000
-🔄 Phase 1 Workflow
+Phase 1 Workflow
 Open Camera
       ↓
 Capture Image
@@ -141,8 +141,8 @@ Upload Image to Backend
 Backend Generates Styling Suggestion
       ↓
 Speech API Provides Voice Feedback
-🧠 Future Development Roadmap
-🟢 Phase 2 — Digital Wardrobe
+Future Development Roadmap
+Phase 2 — Digital Wardrobe
 
 Wardrobe item storage
 
@@ -150,7 +150,7 @@ Cloud image storage
 
 Outfit history tracking
 
-🔵 Phase 3 — Computer Vision
+Phase 3 — Computer Vision
 
 Clothing detection
 
@@ -158,7 +158,7 @@ Color analysis
 
 Outfit classification
 
-🟣 Phase 4 — AI Styling System
+Phase 4 — AI Styling System
 
 2D virtual try-on
 
@@ -166,52 +166,52 @@ Pose detection
 
 AI-based style recommendations
 
-💼 Industry Use Cases
+Industry Use Cases
 
 This system can be used in several fashion-tech applications:
 
-🛍 Fashion technology platforms
+Fashion technology platforms
 
-🪞 Smart mirror systems
+Smart mirror systems
 
-🛒 E-commerce styling assistants
+E-commerce styling assistants
 
-🤖 AI personal assistants
+AI personal assistants
 
-🏬 Retail technology solutions
+Retail technology solutions
 
-🏆 Key Highlights
+Key Highlights
 
-✨ Camera + voice feedback integration
+Camera + voice feedback integration
 
-⚙ Modular and scalable backend design
+Modular and scalable backend design
 
-🧱 Clean MERN-style architecture
+Clean MERN-style architecture
 
-🧠 AI-ready system for future expansion
+AI-ready system for future expansion
 
-📜 License
+License
 
 This project is developed for educational and research purposes.
 
-🤝 Contributors
+Contributors
 
-👨‍💻 Shashwat Dhondyal
+Shashwat Dhondyal
 
-👩‍💻 Tejaswini Rath
+Tejaswini Rath
 
-👨‍💻 Sanjay Suthar
+Sanjay Suthar
 
-👨‍💻 Narayan Hari Singh
+Narayan Hari Singh
 
-⭐ Project Vision
+Project Vision
 
 The long-term goal of Style-A-Silhouette is to evolve into a complete smart wardrobe ecosystem powered by:
 
-☁ Cloud computing
+Cloud computing
 
-🧠 Computer vision
+Computer vision
 
-🤖 AI-driven personalization
+AI-driven personalization
 
 Helping users make smarter and more confident fashion choices.
