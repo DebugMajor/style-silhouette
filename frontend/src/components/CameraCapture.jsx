@@ -1,86 +1,109 @@
-import { useRef, useState } from "react";
+import { useRef, useState } from "react"
+import axios from "axios"
 
 function CameraCapture() {
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const [image, setImage] = useState(null);
-  const [message, setMessage] = useState("");
 
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-      });
-      videoRef.current.srcObject = stream;
-    } catch (error) {
-      alert("Camera permission required");
+    const videoRef = useRef(null)
+    const canvasRef = useRef(null)
+
+    const [image, setImage] = useState(null)
+    const [message, setMessage] = useState("")
+
+    const startCamera = async () => {
+
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+        videoRef.current.srcObject = stream
+
     }
-  };
 
-  const speakMessage = (text) => {
-    const speech = new SpeechSynthesisUtterance(text);
-    speech.lang = "en-US";
-    window.speechSynthesis.speak(speech);
-  };
+    const speak = (text) => {
 
-  const captureImage = () => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
+        const speech = new SpeechSynthesisUtterance(text)
+        speech.lang = "en-US"
+        window.speechSynthesis.speak(speech)
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    }
 
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0);
+    const capture = () => {
 
-    canvas.toBlob(async (blob) => {
-      const formData = new FormData();
-      formData.append("image", blob);
+        const video = videoRef.current
+        const canvas = canvasRef.current
 
-      try {
-        const response = await fetch("http://localhost:5000/api/upload", {
-          method: "POST",
-          body: formData,
-        });
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
 
-        const data = await response.json();
+        const ctx = canvas.getContext("2d")
+        ctx.drawImage(video, 0, 0)
 
-        setMessage(data.message);
-        speakMessage(data.message);
+        canvas.toBlob(async (blob) => {
 
-      } catch (error) {
-        console.error("Upload failed:", error);
-      }
-    });
+            const formData = new FormData()
+            formData.append("image", blob)
 
-    const imageData = canvas.toDataURL("image/png");
-    setImage(imageData);
-  };
+            try {
 
-  return (
-    <div style={{ textAlign: "center" }}>
-      <button onClick={startCamera}>Start Camera</button>
-      <button onClick={captureImage}>Capture</button>
+                const res = await axios.post(
+                    "http://localhost:5000/api/ai/analyze",
+                    formData
+                )
 
-      <br /><br />
+                setMessage(res.data.result)
+                speak(res.data.result)
 
-      <video ref={videoRef} autoPlay width="400" />
-      <canvas ref={canvasRef} style={{ display: "none" }} />
+            } catch (err) {
 
-      {image && (
-        <div>
-          <h3>Captured Image:</h3>
-          <img src={image} width="400" alt="Captured" />
+                console.log(err)
+
+            }
+
+        })
+
+        setImage(canvas.toDataURL())
+
+    }
+
+    return (
+
+        <div className="card">
+
+            <button className="btn" onClick={startCamera}>
+                Start Camera
+            </button>
+
+            <button className="btn" onClick={capture}>
+                Capture Outfit
+            </button>
+
+            <br /><br />
+
+            <video ref={videoRef} autoPlay width="400" />
+
+            <canvas ref={canvasRef} style={{ display: "none" }} />
+
+            {image && (
+
+                <div>
+
+                    <h3>Captured Image</h3>
+
+                    <img src={image} width="400" />
+
+                </div>
+
+            )}
+
+            {message && (
+
+                <h2 style={{ marginTop: "20px", color: "#ff0055" }}>
+                    {message}
+                </h2>
+
+            )}
+
         </div>
-      )}
 
-      {message && (
-        <h2 style={{ marginTop: "20px", color: "green" }}>
-          {message}
-        </h2>
-      )}
-    </div>
-  );
+    )
+
 }
 
-export default CameraCapture;
+export default CameraCapture
