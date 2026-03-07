@@ -1,10 +1,10 @@
-const express = require("express");
-const multer = require("multer");
-const controller = require("../controllers/cameraController");
+import express from "express";
+import multer from "multer";
+import {handleUpload} from "../controllers/cameraController.js";
 
 const router = express.Router();
-const upload = multer({ dest: "uploads/" });
+const upload = multer({dest:"uploads/"});
 
-router.post("/upload", upload.single("image"), controller.handleUpload);
+router.post("/upload",upload.single("image"),handleUpload);
 
-module.exports = router;
+export default router;

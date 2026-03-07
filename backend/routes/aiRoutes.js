@@ -1,8 +1,11 @@
-import express from "express";
-import { analyzeImage } from "../controllers/aiController.js";
+import express from "express"
+import multer from "multer"
+import {analyzeImage} from "../controllers/aiController.js"
 
-const router = express.Router();
+const router = express.Router()
 
-router.post("/analyze", analyzeImage);
+const upload = multer({dest:"uploads/"})
 
-export default router;
+router.post("/analyze",upload.single("image"),analyzeImage)
+
+export default router

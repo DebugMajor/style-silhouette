@@ -1,18 +1,33 @@
-const express = require("express");
-const cors = require("cors");
+import express from "express";
+import mongoose from "mongoose";
+import cors from "cors";
+import dotenv from "dotenv";
 
-const cameraRoutes = require("./routes/cameraRoutes");
+import authRoutes from "./routes/authRoutes.js";
+import analyzeRoutes from "./routes/analyzeRoutes.js";
+
+dotenv.config();
 
 const app = express();
-const PORT = 5000;
 
-// Middlewares
 app.use(cors());
 app.use(express.json());
 
-// Routes
-app.use("/api", cameraRoutes);
+/* ROUTES */
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+app.use("/api/auth", authRoutes);
+app.use("/api", analyzeRoutes);
+
+/* DATABASE */
+
+mongoose.connect(process.env.MONGO_URI)
+.then(()=>console.log("MongoDB Connected"))
+.catch(err=>console.log(err));
+
+/* SERVER */
+
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT,()=>{
+console.log(`Server running on port ${PORT}`);
 });

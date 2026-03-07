@@ -1,17 +1,17 @@
-exports.handleUpload = (req, res) => {
+export const handleUpload = (req,res)=>{
 
-  const messages = [
-    "You look amazing 🔥",
-    "That outfit suits you perfectly!",
-    "Try pairing this with dark jeans.",
-    "Great choice! Very stylish.",
-    "You’re rocking this look!"
-  ];
+const responses = [
+"You look amazing 🔥",
+"That outfit suits you perfectly!",
+"Try pairing this with dark jeans.",
+"Great choice! Very stylish.",
+"You’re rocking this look!"
+];
 
-  const randomMessage =
-    messages[Math.floor(Math.random() * messages.length)];
+const random = responses[Math.floor(Math.random()*responses.length)];
 
-  res.json({
-    message: randomMessage
-  });
+res.json({
+message:random
+});
+
 };
