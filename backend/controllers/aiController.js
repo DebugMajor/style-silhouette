@@ -1,44 +1,37 @@
-import OpenAI from "openai"
+const OutfitAnalysis = require('../models/OutfitAnalysis')
 
-const client = new OpenAI({
-apiKey:process.env.OPENAI_API_KEY
-})
+const analyzeImage = async (req, res) => {
+    try {
+        const result = "Nice outfit! Try adding contrast for better styling."
 
-export const analyzeImage = async(req,res)=>{
+        if (req.user) {
+            await OutfitAnalysis.create({
+                userId: req.user._id,
+                source: 'camera',
+                aiText: result
+            })
+        }
 
-try{
-
-const response = await client.chat.completions.create({
-
-model:"gpt-4o-mini",
-
-messages:[
-
-{
-role:"system",
-content:"You are an AI fashion stylist. Analyze outfits and give suggestions."
-},
-
-{
-role:"user",
-content:"The user uploaded an outfit photo. Give styling feedback."
+        res.json({ result })
+    } catch (err) {
+        console.error(err)
+        res.status(500).json({ error: "AI analysis failed" })
+    }
 }
 
-]
+const voiceStyling = async (req, res) => {
+    try {
+        const { transcript } = req.body
 
-})
-
-res.json({
-
-result:response.choices[0].message.content
-
-})
-
-}catch(err){
-
-console.log(err)
-res.status(500).json({error:"AI analysis failed"})
-
+        res.json({
+            success: true,
+            outfit: ["White Shirt", "Blue Jeans"],
+            reasoning: "Clean smart casual",
+            score: 8
+        })
+    } catch (err) {
+        res.status(500).json({ message: "Voice styling failed" })
+    }
 }
 
-}
+module.exports = { analyzeImage, voiceStyling }

@@ -1,47 +1,22 @@
-import mongoose from "mongoose";
+const mongoose = require('mongoose')
 
-const outfitAnalysisSchema = new mongoose.Schema({
+const outfitAnalysisSchema = new mongoose.Schema(
+    {
+        userId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            required: true,
+        },
+        imageUrl: String,
+        source: String,
+        top: String,
+        bottom: String,
+        shoes: String,
+        accessories: String,
+        suggestions: [String],
+        styleScore: Number,
+    },
+    { timestamps: true }
+)
 
-userId:{
-type:mongoose.Schema.Types.ObjectId,
-ref:"User",
-required:true
-},
-
-imageUrl:{
-type:String,
-required:true
-},
-
-top:{
-type:String
-},
-
-bottom:{
-type:String
-},
-
-shoes:{
-type:String
-},
-
-accessories:{
-type:String
-},
-
-suggestions:{
-type:[String]
-},
-
-styleScore:{
-type:Number
-},
-
-createdAt:{
-type:Date,
-default:Date.now
-}
-
-});
-
-export default mongoose.model("OutfitAnalysis", outfitAnalysisSchema);
+module.exports = mongoose.model('OutfitAnalysis', outfitAnalysisSchema)

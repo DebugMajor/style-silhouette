@@ -1,142 +1,114 @@
-import { useState, useContext } from "react"
-import { Link, useNavigate } from "react-router-dom"
-import { User, Mail, Lock } from "lucide-react"
-import { AuthContext } from "../context/AuthContext"
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 
-function Register() {
-
-    const [name, setName] = useState("")
-    const [email, setEmail] = useState("")
-    const [password, setPassword] = useState("")
-    const [error, setError] = useState("")
-
+export default function Register() {
+    const { register } = useAuth()
     const navigate = useNavigate()
+    const [form, setForm] = useState({ name: '', email: '', password: '' })
+    const [error, setError] = useState('')
+    const [loading, setLoading] = useState(false)
 
-    const { login } = useContext(AuthContext)
-
-    const handleRegister = async (e) => {
-
+    const handle = async (e) => {
         e.preventDefault()
-
+        setError(''); setLoading(true)
         try {
-
-            const res = await fetch("http://localhost:5000/api/auth/register", {
-
-                method: "POST",
-
-                headers: {
-                    "Content-Type": "application/json"
-                },
-
-                body: JSON.stringify({
-                    name,
-                    email,
-                    password
-                })
-
-            })
-
-            const data = await res.json()
-
-            if (!res.ok) {
-                throw new Error(data.message || "Registration failed")
-            }
-
-            /* SAVE TOKEN */
-
-            login(data.token)
-
-            /* REDIRECT */
-
-            navigate("/camera")
-
+            await register(form.name, form.email, form.password)
+            navigate('/dashboard')
         } catch (err) {
-
-            setError(err.message)
-
+            setError(err?.response?.data?.message || 'Registration failed. Please try again.')
+        } finally {
+            setLoading(false)
         }
-
     }
 
     return (
+        <div style={{
+            background: 'var(--void)',
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '40px',
+            position: 'relative',
+            overflow: 'hidden',
+        }}>
+            {/* Ambient glow */}
+            <div style={{
+                position: 'absolute', width: '600px', height: '600px', borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(220,20,60,.18), transparent 65%)',
+                filter: 'blur(60px)', pointerEvents: 'none', top: '50%', left: '50%',
+                transform: 'translate(-50%,-50%)', animation: 'breathe 6s ease-in-out infinite',
+            }} />
 
-        <div className="auth-page">
+            <div className="au d1" style={{
+                width: '100%', maxWidth: '400px',
+                padding: '44px 38px',
+                background: 'rgba(8,3,3,.9)',
+                border: '1px solid rgba(220,20,60,.15)',
+                borderRadius: '2px',
+                backdropFilter: 'blur(32px)',
+                position: 'relative',
+                overflow: 'hidden',
+                zIndex: 2,
+            }}>
+                {/* Watermark */}
+                <div style={{
+                    position: 'absolute', right: '-20px', bottom: '-30px',
+                    fontFamily: 'var(--fp)', fontSize: '200px', fontWeight: 900, fontStyle: 'italic',
+                    color: 'rgba(220,20,60,.04)', lineHeight: 1, pointerEvents: 'none',
+                }}>S</div>
 
-            <div className="auth-card">
+                <span style={{ fontFamily: 'var(--fp)', fontSize: '12px', fontStyle: 'italic', fontWeight: 700, color: 'var(--t3)', marginBottom: '28px', display: 'block' }}>
+                    Style-A-Silhouette
+                </span>
 
-                <h2 className="auth-title">
-                    Create Account
-                </h2>
+                <div className="ol-r" style={{ marginBottom: '8px' }}>Create account</div>
+                <div style={{ fontFamily: 'var(--fp)', fontSize: '38px', fontWeight: 700, color: 'var(--t1)', lineHeight: 1.05, marginBottom: '30px' }}>
+                    Start your<br /><em style={{ fontStyle: 'italic', color: 'var(--r)' }}>journey</em>
+                </div>
 
-                <p className="auth-subtitle">
-                    Join Style-A-Silhouette
-                </p>
-
-                {error && <p className="auth-error">{error}</p>}
-
-                <form onSubmit={handleRegister} className="auth-form">
-
-                    <div className="input-group">
-
-                        <User size={18} />
-
-                        <input
-                            type="text"
-                            placeholder="Full Name"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            required
-                        />
-
+                {error && (
+                    <div style={{ fontFamily: 'var(--fm)', fontSize: '10px', color: 'var(--rh)', marginBottom: '16px', padding: '10px 14px', background: 'rgba(220,20,60,.07)', border: '1px solid rgba(220,20,60,.2)', borderRadius: '2px' }}>
+                        {error}
                     </div>
+                )}
 
-                    <div className="input-group">
-
-                        <Mail size={18} />
-
+                <form onSubmit={handle}>
+                    <div className="field">
+                        <label className="lbl">Full Name</label>
                         <input
-                            type="email"
-                            placeholder="Email Address"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
+                            className="inp" type="text" placeholder="Your name" required
+                            value={form.name}
+                            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                         />
-
                     </div>
-
-                    <div className="input-group">
-
-                        <Lock size={18} />
-
+                    <div className="field">
+                        <label className="lbl">Email</label>
                         <input
-                            type="password"
-                            placeholder="Password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
+                            className="inp" type="email" placeholder="your@email.com" required
+                            value={form.email}
+                            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                         />
-
                     </div>
-
-                    <button className="auth-btn">
-                        Create Account
+                    <div className="field">
+                        <label className="lbl">Password</label>
+                        <input
+                            className="inp" type="password" placeholder="8+ characters" required minLength={8}
+                            value={form.password}
+                            onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                        />
+                    </div>
+                    <button type="submit" className="btn bp" disabled={loading}
+                        style={{ width: '100%', padding: '14px', marginTop: '8px', fontSize: '12px' }}>
+                        {loading ? 'Creating account…' : 'Create Account →'}
                     </button>
-
                 </form>
 
-                <p className="auth-switch">
-
-                    Already have an account?
-                    <Link to="/login"> Login</Link>
-
-                </p>
-
+                <div style={{ textAlign: 'center', marginTop: '18px', fontFamily: 'var(--fg)', fontSize: '12px', color: 'var(--t3)' }}>
+                    Have an account? <Link to="/login" style={{ color: 'var(--rh)', cursor: 'none' }}>Sign in</Link>
+                </div>
             </div>
-
         </div>
-
     )
-
 }
-
-export default Register

@@ -1,33 +1,73 @@
-import express from "express";
-import mongoose from "mongoose";
-import cors from "cors";
-import dotenv from "dotenv";
+const express = require('express')
+const cors = require('cors')
+const morgan = require('morgan')
+const path = require('path')
+require('dotenv').config()
 
-import authRoutes from "./routes/authRoutes.js";
-import analyzeRoutes from "./routes/analyzeRoutes.js";
+const connectDB = require('./config/db')
 
-dotenv.config();
+// ── Route imports ─────────────────────────────────────────
+const authRoutes = require('./routes/authRoutes')
+const analyzeRoutes = require('./routes/analyzeRoutes')
+const aiRoutes = require('./routes/aiRoutes')
+const cameraRoutes = require('./routes/cameraRoutes')
 
-const app = express();
+// ── Connect to MongoDB ────────────────────────────────────
+connectDB()
 
-app.use(cors());
-app.use(express.json());
+const app = express()
 
-/* ROUTES */
+// ── Global Middleware ─────────────────────────────────────
+app.use(cors({
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+}))
 
-app.use("/api/auth", authRoutes);
-app.use("/api", analyzeRoutes);
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
 
-/* DATABASE */
+if (process.env.NODE_ENV === 'development') {
+    app.use(morgan('dev'))
+}
 
-mongoose.connect(process.env.MONGO_URI)
-.then(()=>console.log("MongoDB Connected"))
-.catch(err=>console.log(err));
+// ── Static uploads ────────────────────────────────────────
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
-/* SERVER */
+// ── API Routes ────────────────────────────────────────────
+app.use('/api/auth', authRoutes)
+app.use('/api/analyze', analyzeRoutes)
+app.use('/api/ai', aiRoutes)
+app.use('/api/camera', cameraRoutes)
 
-const PORT = process.env.PORT || 5000;
+// ── Health check ──────────────────────────────────────────
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() })
+})
 
-app.listen(PORT,()=>{
-console.log(`Server running on port ${PORT}`);
-});
+// ── 404 handler ───────────────────────────────────────────
+app.use((req, res, next) => {
+    const err = new Error(`Not Found — ${req.originalUrl}`)
+    err.status = 404
+    next(err)
+})
+
+// ── Global error handler ──────────────────────────────────
+app.use((err, req, res, next) => {
+    const statusCode = err.status || err.statusCode || 500
+    console.error(`[ERROR] ${statusCode} — ${err.message}`)
+    res.status(statusCode).json({
+        success: false,
+        message: err.message || 'Internal Server Error',
+        ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    })
+})
+
+// ── Start server ──────────────────────────────────────────
+const PORT = process.env.PORT || 5000
+app.listen(PORT, () => {
+    console.log(`\n🚀  Server running on http://localhost:${PORT}`)
+    console.log(`📦  ENV: ${process.env.NODE_ENV}`)
+    console.log(`🗄️   DB:  ${process.env.MONGO_URI ? 'Connected (Atlas)' : '⚠️  MONGO_URI not set'}\n`)
+})
