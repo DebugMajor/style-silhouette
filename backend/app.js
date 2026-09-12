@@ -11,6 +11,7 @@ const authRoutes = require('./routes/authRoutes')
 const analyzeRoutes = require('./routes/analyzeRoutes')
 const aiRoutes = require('./routes/aiRoutes')
 const cameraRoutes = require('./routes/cameraRoutes')
+const virtualTryOnRoutes = require('./routes/virtualTryOnRoutes')
 
 // ── Connect to MongoDB ────────────────────────────────────
 connectDB()
@@ -40,6 +41,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/analyze', analyzeRoutes)
 app.use('/api/ai', aiRoutes)
 app.use('/api/camera', cameraRoutes)
+app.use('/api/virtual-tryon', virtualTryOnRoutes)
 
 // ── Health check ──────────────────────────────────────────
 app.get('/api/health', (req, res) => {

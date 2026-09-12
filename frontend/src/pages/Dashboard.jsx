@@ -4,9 +4,9 @@ import { useAuth } from '../context/AuthContext'
 import axios from 'axios'
 
 const QUICK = [
+    { icon: '✂', label: 'Try-On', to: '/dashboard/virtual-try-on' },
     { icon: '◎', label: 'Camera', to: '/dashboard/camera' },
     { icon: '↑', label: 'Upload', to: '/dashboard/upload' },
-    { icon: '✦', label: 'Suggest', to: '/dashboard/suggestions' },
     { icon: '◫', label: 'Wardrobe', to: '/dashboard/wardrobe' },
 ]
 

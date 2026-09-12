@@ -12,6 +12,7 @@ import Upload from './pages/Upload'
 import Wardrobe from './pages/Wardrobe'
 import Suggestions from './pages/Suggestions'
 import Voice from './pages/Voice'
+import VirtualTryOn from './pages/VirtualTryOn'
 
 /* ── Lerp cursor controller ─────────────────────────────── */
 function CursorController() {
@@ -83,6 +84,7 @@ export default function App() {
                     <Route path="wardrobe" element={<Wardrobe />} />
                     <Route path="suggestions" element={<Suggestions />} />
                     <Route path="voice" element={<Voice />} />
+                    <Route path="virtual-try-on" element={<VirtualTryOn />} />
                 </Route>
 
                 {/* Fallback */}

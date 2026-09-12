@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 
 const NAV_ITEMS = [
     { icon: '◎', label: 'Camera Styling', to: '/dashboard/camera', live: true },
+    { icon: '✂', label: 'Virtual Try-On', to: '/dashboard/virtual-try-on' },
     { icon: '◫', label: 'Digital Wardrobe', to: '/dashboard/wardrobe' },
     { icon: '✦', label: 'AI Suggestions', to: '/dashboard/suggestions' },
     { icon: '↑', label: 'Upload Outfit', to: '/dashboard/upload' },

@@ -1,0 +1,86 @@
+# Blender 4.0.2 MTL File: 'The Girl 4.0.blend'
+# www.blender.org
+
+newmtl body
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd textures/body_basecolor.png
+map_Ks textures/body_specular.png
+map_Ns textures/body_roughness.png
+map_Bump -bm 1.000000 textures/body_normal.png
+
+newmtl bunny_ear
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd textures/bunny_ear_basecolor.png
+map_Ns textures/bunny_ear_roughness.png
+map_Bump -bm 1.000000 textures/bunny_ear_normal.png
+
+newmtl dress
+Ka 0.425197 0.425197 0.425197
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+illum 3
+map_Ns textures/dress_Roughness.png
+map_d textures/dress_alpha.png
+
+newmtl eyes
+Ns 1000.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd textures/Eye_green_BaseColor.png
+
+newmtl eyes_lashes
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+illum 2
+map_Kd textures/eyelashes_basecolor_opacity.png
+map_d textures/eyelashes_basecolor_opacity.png
+map_Bump -bm 1.000000 textures/eyelashes_normal.png
+
+newmtl hair
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+illum 2
+map_Kd textures/hair_basecolor.jpg
+map_d textures/hair_alpha.png
+
+newmtl pussy_hair
+Ns 170.887817
+Ka 0.212598 0.212598 0.212598
+Kd 0.051373 0.023006 0.017397
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+illum 3
+map_d textures/pussy_hair_alpha.png
+
+newmtl sock
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd textures/sexy_sock_basecolor.png
+map_Ns textures/sexy_sock_roughness.png
+map_Bump -bm 1.000000 textures/sexy_sock_normal.png
