@@ -12,6 +12,8 @@ const analyzeRoutes = require('./routes/analyzeRoutes')
 const aiRoutes = require('./routes/aiRoutes')
 const cameraRoutes = require('./routes/cameraRoutes')
 const virtualTryOnRoutes = require('./routes/virtualTryOnRoutes')
+const aiTrendRoutes = require('./routes/aiTrendRoutes')
+const styleSpeakerRoutes = require('./routes/styleSpeakerRoutes')
 
 // ── Connect to MongoDB ────────────────────────────────────
 connectDB()
@@ -42,6 +44,8 @@ app.use('/api/analyze', analyzeRoutes)
 app.use('/api/ai', aiRoutes)
 app.use('/api/camera', cameraRoutes)
 app.use('/api/virtual-tryon', virtualTryOnRoutes)
+app.use('/api/ai-trend', aiTrendRoutes)
+app.use('/api/style-speaker', styleSpeakerRoutes)
 
 // ── Health check ──────────────────────────────────────────
 app.get('/api/health', (req, res) => {

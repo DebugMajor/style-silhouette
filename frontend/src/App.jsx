@@ -13,6 +13,7 @@ import Wardrobe from './pages/Wardrobe'
 import Suggestions from './pages/Suggestions'
 import Voice from './pages/Voice'
 import VirtualTryOn from './pages/VirtualTryOn'
+import AITrend from './pages/AITrend'
 
 /* ── Lerp cursor controller ─────────────────────────────── */
 function CursorController() {
@@ -85,7 +86,10 @@ export default function App() {
                     <Route path="suggestions" element={<Suggestions />} />
                     <Route path="voice" element={<Voice />} />
                     <Route path="virtual-try-on" element={<VirtualTryOn />} />
+                    <Route path="ai-trend" element={<Navigate to="/dashboard/suggestions?tab=ai-trend" replace />} />
                 </Route>
+
+                <Route path="/ai-trend" element={<Navigate to="/dashboard/suggestions?tab=ai-trend" replace />} />
 
                 {/* Fallback */}
                 <Route path="*" element={<Navigate to="/" replace />} />

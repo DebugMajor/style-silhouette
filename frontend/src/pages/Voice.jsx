@@ -1,245 +1,524 @@
-import { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
+import AIStyleCharacter from '../components/AIStyleCharacter'
 
-const EXAMPLES = [
-    '"I have a board meeting tomorrow morning, smart casual dress code."',
-    '"Date night at a nice restaurant, nothing too formal."',
-    '"Weekend brunch, relaxed but put-together."',
-    '"Job interview at a tech startup, modern professional."',
-]
+const OCCASIONS = ['Casual', 'Formal', 'Party', 'College', 'Travel', 'Traditional', 'Streetwear']
 
-const pnl = { background: 'rgba(8,3,3,.8)', border: '1px solid var(--b)', borderRadius: '2px' }
-
-/* Mock response — replace with actual /api/ai/voice call */
-const MOCK_RESULT = {
-    occasion: 'Board Meeting — Smart Casual',
-    outfit: ['Navy Blazer', 'White Oxford', 'Dark Chinos', 'Tan Chelsea Boots', 'Leather Watch'],
-    score: 91,
-    reasoning: 'Navy blazer over a white oxford keeps authority while the chinos soften the formality. Chelsea boots bridge smart and casual perfectly for a modern workplace.',
+function getAuthHeaders() {
+    try {
+        const stored = localStorage.getItem('sas_user')
+        if (stored) {
+            const parsed = JSON.parse(stored)
+            if (parsed.token) return { Authorization: `Bearer ${parsed.token}` }
+        }
+    } catch {}
+    return {}
 }
 
 export default function Voice() {
-    const [mode, setMode] = useState('idle')   // idle | recording | processing | result
-    const [transcript, setTranscript] = useState('')
-    const [result, setResult] = useState(null)
-    const [error, setError] = useState('')
-    const [ripple, setRipple] = useState(false)
+    const navigate = useNavigate()
+    const characterRef = useRef(null)
+
+    // Camera state
+    const videoRef = useRef(null)
+    const canvasRef = useRef(null)
+    const [cameraOn, setCameraOn] = useState(false)
+    const [cameraError, setCameraError] = useState(null)
+    const [capturedImage, setCapturedImage] = useState(null)
+
+    // Character & Analysis state
+    const [characterState, setCharacterState] = useState('IDLE')
+    const [characterText, setCharacterText] = useState("Hi! I'm your personal fashion stylist. Show me your outfit on camera!")
+    const [selectedOccasion, setSelectedOccasion] = useState('Casual')
+    const [analysisResult, setAnalysisResult] = useState(null)
+    const [isAnalyzing, setIsAnalyzing] = useState(false)
+
+    // Conversation state
+    const [messages, setMessages] = useState([
+        { sender: 'AI', text: "Hi! I'm your personal fashion stylist. Enable your camera and click 'Analyze My Style' or ask me any styling question!" }
+    ])
+    const [inputText, setInputText] = useState('')
+    const [isListeningMic, setIsListeningMic] = useState(false)
     const recognitionRef = useRef(null)
 
-    const startRecording = useCallback(() => {
+    // Start Live Camera
+    const startCamera = async () => {
+        setCameraError(null)
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
+            })
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream
+            }
+            setCameraOn(true)
+        } catch (err) {
+            console.error('[Camera] Access denied or error:', err)
+            setCameraError('Camera access is required for live style analysis.')
+            setCameraOn(false)
+        }
+    }
+
+    // Stop Live Camera
+    const stopCamera = () => {
+        if (videoRef.current && videoRef.current.srcObject) {
+            const tracks = videoRef.current.srcObject.getTracks()
+            tracks.forEach(track => track.stop())
+            videoRef.current.srcObject = null
+        }
+        setCameraOn(false)
+    }
+
+    // Cleanup camera on unmount
+    useEffect(() => {
+        return () => {
+            stopCamera()
+        }
+    }, [])
+
+    // Handle File Upload Fallback
+    const handleFileUpload = (e) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setCapturedImage(URL.createObjectURL(file))
+        runAnalysisOnBlob(file)
+    }
+
+    // Capture Frame & Analyze Style
+    const captureAndAnalyze = () => {
+        const video = videoRef.current
+        const canvas = canvasRef.current
+        if (!video || !canvas) return
+
+        canvas.width = video.videoWidth || 640
+        canvas.height = video.videoHeight || 480
+
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+        canvas.toBlob((blob) => {
+            if (!blob) return
+            setCapturedImage(canvas.toDataURL('image/jpeg'))
+            runAnalysisOnBlob(blob)
+        }, 'image/jpeg', 0.9)
+    }
+
+    const runAnalysisOnBlob = async (imageBlob) => {
+        setIsAnalyzing(true)
+        setCharacterState('THINKING')
+        setCharacterText('Analyzing your visible outfit and style proportions...')
+
+        const formData = new FormData()
+        formData.append('image', imageBlob, 'capture.jpg')
+        formData.append('occasion', selectedOccasion)
+
+        try {
+            const res = await axios.post('/api/style-speaker/analyze', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    ...getAuthHeaders()
+                }
+            })
+
+            const analysis = res.data?.analysis
+            if (analysis) {
+                setAnalysisResult(analysis)
+                const speechAdvice = analysis.spokenResponse || analysis.outfitSummary
+                setCharacterText(speechAdvice)
+                setMessages(prev => [...prev, { sender: 'AI', text: speechAdvice }])
+
+                // Trigger ElevenLabs Speech Audio
+                fetchElevenLabsSpeech(speechAdvice)
+            }
+        } catch (err) {
+            console.error('[Voice] Analysis failed:', err)
+            const fallbackText = "I've inspected your outfit! The color combination looks balanced. Try pairing with neutral footwear."
+            setCharacterText(fallbackText)
+            fetchElevenLabsSpeech(fallbackText)
+        } finally {
+            setIsAnalyzing(false)
+        }
+    }
+
+    // Fetch Speech Audio from Backend ElevenLabs Endpoint (POST /api/style-speaker/speak)
+    const fetchElevenLabsSpeech = async (textToSpeak) => {
+        if (!textToSpeak) return
+        try {
+            const res = await axios.post('/api/style-speaker/speak', { text: textToSpeak }, {
+                headers: getAuthHeaders(),
+                responseType: 'blob'
+            })
+
+            if (res.data && res.data.type?.includes('audio')) {
+                if (characterRef.current) {
+                    characterRef.current.playAudioStream(res.data, textToSpeak)
+                }
+            } else {
+                if (characterRef.current) {
+                    characterRef.current.fallbackWebSpeech(textToSpeak)
+                }
+            }
+        } catch (err) {
+            console.warn('[Voice] ElevenLabs speech fetch fallback:', err.message)
+            if (characterRef.current) {
+                characterRef.current.fallbackWebSpeech(textToSpeak)
+            }
+        }
+    }
+
+    // Conversational Follow-Up Chat
+    const handleSendMessage = async (customMsg) => {
+        const text = customMsg || inputText
+        if (!text || !text.trim()) return
+
+        const userMsg = text.trim()
+        setInputText('')
+
+        setMessages(prev => [...prev, { sender: 'USER', text: userMsg }])
+        setCharacterState('THINKING')
+        setCharacterText('Thinking...')
+
+        try {
+            const res = await axios.post('/api/style-speaker/chat', {
+                message: userMsg,
+                occasion: selectedOccasion,
+                currentOutfit: analysisResult
+            }, {
+                headers: getAuthHeaders()
+            })
+
+            const replyText = res.data?.spokenResponse || "That's a stylish idea! Keep your outfit proportions balanced."
+            setCharacterText(replyText)
+            setMessages(prev => [...prev, { sender: 'AI', text: replyText }])
+
+            // Trigger Speech Audio
+            fetchElevenLabsSpeech(replyText)
+        } catch (err) {
+            const fallbackReply = "For that occasion, I'd suggest pairing a dark blazer with neutral footwear."
+            setCharacterText(fallbackReply)
+            setMessages(prev => [...prev, { sender: 'AI', text: fallbackReply }])
+            fetchElevenLabsSpeech(fallbackReply)
+        }
+    }
+
+    // Mic Button (Speech Recognition)
+    const toggleMic = () => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
         if (!SpeechRecognition) {
-            setError('Voice recognition not supported in this browser. Try Chrome.')
+            alert('Voice recognition is not supported in this browser. Try Chrome.')
             return
         }
-        setError(''); setTranscript(''); setMode('recording'); setRipple(true)
-        const rec = new SpeechRecognition()
-        rec.continuous = true
-        rec.interimResults = true
-        rec.lang = 'en-US'
-        rec.onresult = (e) => {
-            const t = Array.from(e.results).map(r => r[0].transcript).join('')
-            setTranscript(t)
+
+        if (isListeningMic) {
+            recognitionRef.current?.stop()
+            setIsListeningMic(false)
+            setCharacterState('IDLE')
+            return
         }
-        rec.onerror = () => { setMode('idle'); setRipple(false); setError('Microphone error. Please allow mic access.') }
-        rec.onend = () => setRipple(false)
+
+        const rec = new SpeechRecognition()
+        rec.lang = 'en-US'
+        rec.interimResults = false
+
+        rec.onstart = () => {
+            setIsListeningMic(true)
+            setCharacterState('LISTENING')
+            setCharacterText('Listening to your question...')
+        }
+
+        rec.onresult = (e) => {
+            const transcriptText = e.results[0][0].transcript
+            setIsListeningMic(false)
+            handleSendMessage(transcriptText)
+        }
+
+        rec.onerror = () => {
+            setIsListeningMic(false)
+            setCharacterState('IDLE')
+        }
+
+        rec.onend = () => {
+            setIsListeningMic(false)
+        }
+
         recognitionRef.current = rec
         rec.start()
-    }, [])
+    }
 
-    const stopAndAnalyse = useCallback(async () => {
-        recognitionRef.current?.stop()
-        setMode('processing'); setRipple(false)
-        // Simulate API call — replace with: await axios.post('/api/ai/voice', { transcript })
-        await new Promise(r => setTimeout(r, 1600))
-        setResult(MOCK_RESULT)
-        setMode('result')
-    }, [])
-
-    const reset = () => { setMode('idle'); setTranscript(''); setResult(null); setError('') }
-
-    const score = result?.score ?? 0
-    const dashOffset = 251.2 - (251.2 * score / 100)
+    const handleTryOn = () => {
+        const itemParam = encodeURIComponent(JSON.stringify({
+            id: 'top-1',
+            name: analysisResult?.styleCategory ? `${analysisResult.styleCategory} Look` : 'Recommended Outfit',
+            category: 'Tops'
+        }))
+        navigate(`/dashboard/virtual-try-on?item=${itemParam}`)
+    }
 
     return (
-        <div style={{ padding: '36px 40px', position: 'relative', zIndex: 1 }}>
-            <div className="orb" style={{ width: '380px', height: '380px', background: 'rgba(160,8,32,.14)', top: '-80px', right: '-60px', position: 'absolute', zIndex: 0 }} />
-
+        <div style={{ padding: '36px 40px', maxWidth: '1300px', margin: '0 auto', color: 'var(--t1)' }}>
             {/* Header */}
-            <div className="au" style={{ marginBottom: '28px', position: 'relative', zIndex: 2 }}>
-                <div className="ol-r">Natural Language Styling</div>
-                <div style={{ fontFamily: 'var(--fp)', fontSize: '36px', fontWeight: 700, fontStyle: 'italic', marginTop: '6px' }}>
-                    Voice <span style={{ color: 'var(--r)' }}>Styling</span>
+            <div style={{ marginBottom: '24px', position: 'relative', zIndex: 2 }}>
+                <div className="ol-r">REAL-TIME AI STYLIST</div>
+                <div style={{ fontFamily: 'var(--fp)', fontSize: '36px', fontWeight: 700, fontStyle: 'italic', marginTop: '4px' }}>
+                    AI Style <span style={{ color: 'var(--r)' }}>Speaker</span>
                 </div>
+                <p style={{ fontFamily: 'var(--fg)', fontSize: '13px', color: 'var(--t2)', marginTop: '4px' }}>
+                    Your personal AI fashion consultant powered by live vision analysis & ElevenLabs voice.
+                </p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '24px', alignItems: 'start', position: 'relative', zIndex: 2 }}>
+            {/* Main Interactive Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
 
-                {/* LEFT — mic UI */}
-                <div>
-                    {/* Mic button */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 24px', background: 'rgba(4,1,1,.8)', border: '1px solid rgba(220,20,60,.15)', borderRadius: '2px', marginBottom: '16px', position: 'relative', overflow: 'hidden' }}>
-
-                        {/* HUD top */}
-                        <div style={{ position: 'absolute', top: '16px', fontFamily: 'var(--fm)', fontSize: '9px', letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--r)' }}>
-                            {mode === 'recording' ? 'LISTENING…' : mode === 'processing' ? 'PROCESSING' : 'SAS · VOICE MODE'}
-                        </div>
-
-                        {/* Ripple rings */}
-                        {ripple && (
-                            <>
-                                <div style={{ position: 'absolute', width: '160px', height: '160px', borderRadius: '50%', border: '1px solid rgba(220,20,60,.15)', animation: 'breathe 1.5s ease-in-out infinite', animationDelay: '0s' }} />
-                                <div style={{ position: 'absolute', width: '200px', height: '200px', borderRadius: '50%', border: '1px solid rgba(220,20,60,.08)', animation: 'breathe 1.5s ease-in-out infinite', animationDelay: '.3s' }} />
-                                <div style={{ position: 'absolute', width: '240px', height: '240px', borderRadius: '50%', border: '1px solid rgba(220,20,60,.04)', animation: 'breathe 1.5s ease-in-out infinite', animationDelay: '.6s' }} />
-                            </>
-                        )}
-
-                        {/* Main mic circle */}
-                        <div
-                            onClick={mode === 'idle' ? startRecording : mode === 'recording' ? stopAndAnalyse : undefined}
-                            style={{
-                                width: '96px', height: '96px', borderRadius: '50%',
-                                background: mode === 'recording' ? 'var(--r)' : 'rgba(220,20,60,.1)',
-                                border: `2px solid ${mode === 'recording' ? 'var(--rh)' : 'rgba(220,20,60,.3)'}`,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                cursor: (mode === 'idle' || mode === 'recording') ? 'none' : 'default',
-                                transition: 'all .3s var(--ease)',
-                                boxShadow: mode === 'recording' ? '0 0 40px rgba(220,20,60,.4)' : 'none',
-                                zIndex: 2, flexShrink: 0,
-                                transform: mode === 'recording' ? 'scale(1.05)' : 'scale(1)',
-                            }}>
-                            <span style={{ fontSize: '32px', lineHeight: 1 }}>
-                                {mode === 'processing' ? '◌' : '◉'}
+                {/* LEFT: Live Camera Panel */}
+                <div style={{
+                    background: 'rgba(8,3,3,.85)',
+                    border: '1px solid rgba(220,20,60,.18)',
+                    borderRadius: '4px',
+                    padding: '24px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    minHeight: '520px'
+                }}>
+                    <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <span style={{ fontFamily: 'var(--fm)', fontSize: '10px', letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--r)' }}>
+                                LIVE CAMERA
+                            </span>
+                            <span style={{ fontFamily: 'var(--fg)', fontSize: '11px', color: cameraOn ? '#10b981' : 'var(--t3)' }}>
+                                Status: {cameraOn ? 'ON 🟢' : 'OFF 🔴'}
                             </span>
                         </div>
 
-                        <div style={{ marginTop: '24px', textAlign: 'center', zIndex: 2 }}>
-                            <div style={{ fontFamily: 'var(--fp)', fontSize: '18px', fontStyle: 'italic', color: 'var(--t2)', marginBottom: '6px' }}>
-                                {mode === 'idle' && 'Tap to start'}
-                                {mode === 'recording' && 'Tap to analyse'}
-                                {mode === 'processing' && 'Building outfit…'}
-                                {mode === 'result' && 'Outfit ready'}
+                        {/* Video / Captured Image Preview */}
+                        <div style={{
+                            position: 'relative',
+                            width: '100%',
+                            height: '340px',
+                            background: '#040101',
+                            borderRadius: '4px',
+                            overflow: 'hidden',
+                            border: '1px solid rgba(255,255,255,0.06)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}>
+                            {!cameraOn && !capturedImage ? (
+                                <div style={{ textAlign: 'center', padding: '24px' }}>
+                                    <div style={{ fontSize: '42px', marginBottom: '12px' }}>📹</div>
+                                    <div style={{ fontFamily: 'var(--fg)', fontSize: '14px', fontWeight: 600, marginBottom: '6px' }}>
+                                        Camera Preview Inactive
+                                    </div>
+                                    <div style={{ fontFamily: 'var(--fg)', fontSize: '11px', color: 'var(--t3)', marginBottom: '16px' }}>
+                                        Enable live camera to evaluate your outfit in real-time.
+                                    </div>
+                                    <button className="btn bp" onClick={startCamera} style={{ padding: '10px 20px', fontSize: '12px' }}>
+                                        Start Camera
+                                    </button>
+                                </div>
+                            ) : capturedImage ? (
+                                <img src={capturedImage} alt="Captured frame" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                            ) : (
+                                <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            )}
+
+                            <canvas ref={canvasRef} style={{ display: 'none' }} />
+                        </div>
+
+                        {cameraError && (
+                            <div style={{ padding: '10px', marginTop: '12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '4px', color: '#f87171', fontSize: '11px' }}>
+                                ⚠️ {cameraError}
                             </div>
-                            <div style={{ fontFamily: 'var(--fm)', fontSize: '9px', letterSpacing: '.18em', textTransform: 'uppercase', color: 'var(--t3)' }}>
-                                {mode === 'idle' && 'Describe your occasion'}
-                                {mode === 'recording' && 'Speak naturally'}
-                                {mode === 'processing' && 'AI engine running'}
-                                {mode === 'result' && 'See results →'}
-                            </div>
-                        </div>
-
-                        {/* Bottom readouts */}
-                        <div style={{ position: 'absolute', bottom: '16px', left: '20px', right: '20px', display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--fm)', fontSize: '9px', letterSpacing: '.15em', textTransform: 'uppercase', color: 'rgba(220,20,60,.5)' }}>
-                            <span>{mode === 'recording' ? 'REC ●' : 'STANDBY'}</span>
-                            <span>VOICE AI</span>
-                            <span>EN-US</span>
-                        </div>
+                        )}
                     </div>
 
-                    {/* Transcript display */}
-                    <div style={{ ...pnl, padding: '18px', minHeight: '80px', marginBottom: '16px' }}>
-                        <div className="ol" style={{ marginBottom: '10px' }}>Transcript</div>
-                        <div style={{ fontFamily: 'var(--fp)', fontSize: '15px', fontStyle: 'italic', color: transcript ? 'var(--t1)' : 'var(--t3)', lineHeight: 1.75 }}>
-                            {transcript || '"Start speaking to see your words here…"'}
-                        </div>
-                    </div>
+                    {/* Camera Control Buttons */}
+                    <div style={{ marginTop: '16px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        {cameraOn && (
+                            <>
+                                <button className="btn bp" style={{ flex: 1, padding: '12px', fontSize: '12px' }} onClick={captureAndAnalyze} disabled={isAnalyzing}>
+                                    {isAnalyzing ? 'Analyzing Outfit...' : '⚡ Analyze My Style'}
+                                </button>
+                                <button className="btn" style={{ padding: '12px 16px', fontSize: '12px' }} onClick={stopCamera}>
+                                    Stop
+                                </button>
+                            </>
+                        )}
 
-                    {/* Controls */}
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        {mode === 'idle' && (
-                            <button className="btn bp" style={{ flex: 1, padding: '12px' }} onClick={startRecording}>Start Recording</button>
+                        {capturedImage && (
+                            <button className="btn" style={{ padding: '12px 16px', fontSize: '12px' }} onClick={() => { setCapturedImage(null); startCamera(); }}>
+                                ↺ Retake
+                            </button>
                         )}
-                        {mode === 'recording' && (
-                            <button className="btn bp" style={{ flex: 1, padding: '12px' }} onClick={stopAndAnalyse}>Stop &amp; Analyse</button>
-                        )}
-                        {mode === 'result' && (
-                            <button className="btn" style={{ flex: 1, padding: '12px' }} onClick={reset}>New Query</button>
-                        )}
-                        {error && <div style={{ fontFamily: 'var(--fm)', fontSize: '10px', color: 'var(--rh)', alignSelf: 'center' }}>{error}</div>}
-                    </div>
 
-                    {/* Example prompts */}
-                    <div style={{ marginTop: '20px' }}>
-                        <div className="ol" style={{ marginBottom: '12px' }}>Example Prompts</div>
-                        {EXAMPLES.map((ex, i) => (
-                            <div key={i}
-                                onClick={() => { if (mode === 'idle') { setTranscript(ex.replace(/^"|"$/g, '')) } }}
-                                style={{
-                                    fontFamily: 'var(--fp)', fontSize: '13px', fontStyle: 'italic', color: 'var(--t3)',
-                                    padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,.04)',
-                                    cursor: mode === 'idle' ? 'none' : 'default', transition: 'color .2s', lineHeight: 1.5,
-                                }}
-                                onMouseEnter={e => mode === 'idle' && (e.currentTarget.style.color = 'var(--t2)')}
-                                onMouseLeave={e => (e.currentTarget.style.color = 'var(--t3)')}
-                            >{ex}</div>
-                        ))}
+                        <label className="btn" style={{ padding: '12px 16px', fontSize: '12px', cursor: 'pointer' }}>
+                            Upload Photo
+                            <input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
+                        </label>
                     </div>
                 </div>
 
-                {/* RIGHT — outfit result */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* RIGHT: AI Style Character Avatar Component */}
+                <div style={{ height: '100%', minHeight: '520px' }}>
+                    <AIStyleCharacter
+                        ref={characterRef}
+                        state={characterState}
+                        activeText={characterText}
+                    />
+                </div>
+            </div>
 
-                    {/* Score */}
-                    <div style={{ ...pnl, padding: '20px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-                        <div style={{ position: 'relative', width: '100px', height: '100px', flexShrink: 0 }}>
-                            <svg width="100" height="100" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
-                                <defs>
-                                    <linearGradient id="rg-v" x1="0%" y1="0%" x2="100%" y2="0%">
-                                        <stop offset="0%" stopColor="#8b0020" /><stop offset="100%" stopColor="#ff2d5b" />
-                                    </linearGradient>
-                                </defs>
-                                <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,.05)" strokeWidth="5" />
-                                <circle cx="50" cy="50" r="40" fill="none" stroke="url(#rg-v)" strokeWidth="5"
-                                    strokeLinecap="round" strokeDasharray="251.2"
-                                    strokeDashoffset={mode !== 'result' ? 251.2 : dashOffset}
-                                    transform="rotate(-90 50 50)"
-                                    style={{ transition: 'stroke-dashoffset 1.5s cubic-bezier(.16,1,.3,1)' }} />
-                            </svg>
-                            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                                <span style={{ fontFamily: 'var(--fp)', fontSize: '26px', fontWeight: 700, fontStyle: 'italic', color: 'var(--t1)', lineHeight: 1 }}>
-                                    {mode === 'result' ? score : '—'}
-                                </span>
-                                <span style={{ fontFamily: 'var(--fm)', fontSize: '8px', letterSpacing: '.15em', textTransform: 'uppercase', color: 'var(--r)' }}>score</span>
-                            </div>
-                        </div>
-                        <div>
-                            <div className="ol" style={{ marginBottom: '8px' }}>Style Score</div>
-                            <div style={{ fontFamily: 'var(--fp)', fontSize: '20px', fontStyle: 'italic', color: 'var(--t1)', marginBottom: '4px' }}>
-                                {mode === 'result' ? result.occasion : 'Awaiting prompt'}
-                            </div>
-                            {mode === 'result' && <div style={{ fontFamily: 'var(--fm)', fontSize: '9px', letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--r)' }}>AI Generated Look</div>}
-                        </div>
-                    </div>
-
-                    {/* Suggested outfit */}
-                    <div style={{ ...pnl, padding: '20px' }}>
-                        <div className="ol" style={{ marginBottom: '14px' }}>Suggested Outfit</div>
-                        {mode === 'result'
-                            ? result.outfit.map((item, i) => (
-                                <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: i < result.outfit.length - 1 ? '1px solid rgba(255,255,255,.04)' : 'none' }}>
-                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--r)', flexShrink: 0 }} />
-                                    <span style={{ fontFamily: 'var(--fg)', fontSize: '13px', color: 'var(--t1)' }}>{item}</span>
-                                </div>
-                            ))
-                            : <span style={{ fontFamily: 'var(--fp)', fontSize: '14px', fontStyle: 'italic', color: 'var(--t3)' }}>Items will appear here after your voice prompt.</span>
-                        }
-                    </div>
-
-                    {/* AI reasoning */}
-                    <div style={{ ...pnl, padding: '20px' }}>
-                        <div className="ol" style={{ marginBottom: '4px' }}>AI Reasoning</div>
-                        <blockquote style={{ fontFamily: 'var(--fp)', fontSize: '14px', fontStyle: 'italic', color: mode === 'result' ? 'var(--t2)' : 'var(--t3)', lineHeight: 1.75, borderLeft: '2px solid var(--r)', paddingLeft: '14px', marginTop: '10px' }}>
-                            {mode === 'result'
-                                ? `"${result.reasoning}"`
-                                : '"Describe your occasion and the AI will explain why it chose each item for you."'}
-                        </blockquote>
-                    </div>
-
-                    {/* Save to wardrobe */}
-                    {mode === 'result' && (
-                        <button className="btn bp" style={{ padding: '13px', fontSize: '11px' }}>
-                            Save Outfit to Wardrobe
+            {/* Occasion Selector Pills */}
+            <div style={{ marginBottom: '24px', background: 'rgba(8,3,3,.85)', border: '1px solid rgba(220,20,60,.18)', borderRadius: '4px', padding: '18px 24px' }}>
+                <div style={{ fontFamily: 'var(--fm)', fontSize: '9px', letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--r)', marginBottom: '10px' }}>
+                    SELECT OCCASION STYLING CONTEXT
+                </div>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    {OCCASIONS.map((occ) => (
+                        <button
+                            key={occ}
+                            onClick={() => setSelectedOccasion(occ)}
+                            style={{
+                                padding: '8px 18px',
+                                borderRadius: '20px',
+                                background: selectedOccasion === occ ? 'linear-gradient(135deg, var(--rd), var(--r))' : 'rgba(255,255,255,0.04)',
+                                border: selectedOccasion === occ ? '1px solid var(--r)' : '1px solid rgba(255,255,255,0.1)',
+                                color: selectedOccasion === occ ? '#ffffff' : 'var(--t2)',
+                                fontFamily: 'var(--fg)',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            {occ}
                         </button>
-                    )}
+                    ))}
+                </div>
+            </div>
+
+            {/* Style Analysis Breakdown */}
+            {analysisResult && (
+                <div style={{ marginBottom: '24px', background: 'rgba(8,3,3,.85)', border: '1px solid rgba(220,20,60,.18)', borderRadius: '4px', padding: '24px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h3 style={{ fontFamily: 'var(--fp)', fontSize: '20px', fontStyle: 'italic', margin: 0 }}>
+                            Style Analysis Breakdown
+                        </h3>
+
+                        <button className="btn bp" onClick={handleTryOn} style={{ padding: '8px 18px', fontSize: '11px' }}>
+                            ✂ Try This Style in Virtual Try-On →
+                        </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '14px', borderRadius: '4px' }}>
+                            <div style={{ fontFamily: 'var(--fm)', fontSize: '9px', color: 'var(--r)', letterSpacing: '.15em' }}>STYLE CATEGORY</div>
+                            <div style={{ fontFamily: 'var(--fg)', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginTop: '4px' }}>
+                                {analysisResult.styleCategory}
+                            </div>
+                        </div>
+
+                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '14px', borderRadius: '4px' }}>
+                            <div style={{ fontFamily: 'var(--fm)', fontSize: '9px', color: 'var(--r)', letterSpacing: '.15em' }}>VISIBLE ITEMS</div>
+                            <div style={{ fontFamily: 'var(--fg)', fontSize: '13px', color: 'var(--t2)', marginTop: '4px' }}>
+                                {(analysisResult.visibleItems || []).join(', ')}
+                            </div>
+                        </div>
+
+                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '14px', borderRadius: '4px' }}>
+                            <div style={{ fontFamily: 'var(--fm)', fontSize: '9px', color: 'var(--r)', letterSpacing: '.15em' }}>PALETTE COLORS</div>
+                            <div style={{ fontFamily: 'var(--fg)', fontSize: '13px', color: 'var(--t2)', marginTop: '4px' }}>
+                                {(analysisResult.colors || []).join(', ')}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div style={{ fontFamily: 'var(--fm)', fontSize: '9px', color: 'var(--r)', letterSpacing: '.15em', marginBottom: '8px' }}>
+                            RECOMMENDATIONS
+                        </div>
+                        <ul style={{ margin: 0, paddingLeft: '20px', color: 'var(--t2)', fontFamily: 'var(--fg)', fontSize: '13px', lineHeight: 1.6 }}>
+                            {(analysisResult.recommendations || []).map((rec, i) => (
+                                <li key={i}>{rec}</li>
+                            ))}
+                        </ul>
+                    </div>
+                </div>
+            )}
+
+            {/* Conversation Transcript & Chat Input */}
+            <div style={{ background: 'rgba(8,3,3,.85)', border: '1px solid rgba(220,20,60,.18)', borderRadius: '4px', padding: '24px' }}>
+                <div style={{ fontFamily: 'var(--fm)', fontSize: '9px', letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--r)', marginBottom: '16px' }}>
+                    AI STYLIST DIALOGUE
+                </div>
+
+                {/* Messages Feed */}
+                <div style={{ maxHeight: '220px', overflowY: 'auto', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '12px', paddingRight: '8px' }}>
+                    {messages.map((msg, idx) => (
+                        <div key={idx} style={{
+                            alignSelf: msg.sender === 'USER' ? 'flex-end' : 'flex-start',
+                            maxWidth: '80%',
+                            background: msg.sender === 'USER' ? 'rgba(220,20,60,0.15)' : 'rgba(255,255,255,0.04)',
+                            border: `1px solid ${msg.sender === 'USER' ? 'rgba(220,20,60,0.3)' : 'rgba(255,255,255,0.08)'}`,
+                            padding: '10px 16px',
+                            borderRadius: '6px'
+                        }}>
+                            <div style={{ fontFamily: 'var(--fm)', fontSize: '9px', color: msg.sender === 'USER' ? 'var(--r)' : '#38bdf8', letterSpacing: '.1em', marginBottom: '2px' }}>
+                                {msg.sender === 'USER' ? 'YOU' : 'AI FASHION STYLIST'}
+                            </div>
+                            <div style={{ fontFamily: 'var(--fg)', fontSize: '13px', color: 'var(--t1)', lineHeight: 1.4 }}>
+                                {msg.text}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Input Bar */}
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <input
+                        type="text"
+                        placeholder="Ask your AI stylist (e.g. 'What shoes should I wear to a party?')..."
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                        style={{
+                            flex: 1,
+                            background: 'rgba(0,0,0,0.5)',
+                            border: '1px solid rgba(220,20,60,0.2)',
+                            borderRadius: '4px',
+                            padding: '12px 16px',
+                            color: '#ffffff',
+                            fontFamily: 'var(--fg)',
+                            fontSize: '13px',
+                            outline: 'none'
+                        }}
+                    />
+
+                    <button
+                        onClick={toggleMic}
+                        style={{
+                            padding: '0 16px',
+                            background: isListeningMic ? 'var(--r)' : 'rgba(255,255,255,0.06)',
+                            border: `1px solid ${isListeningMic ? 'var(--r)' : 'rgba(255,255,255,0.15)'}`,
+                            borderRadius: '4px',
+                            color: '#ffffff',
+                            cursor: 'pointer',
+                            fontSize: '16px'
+                        }}
+                        title="Voice Input"
+                    >
+                        🎤
+                    </button>
+
+                    <button
+                        onClick={() => handleSendMessage()}
+                        className="btn bp"
+                        style={{ padding: '0 24px', fontSize: '12px' }}
+                    >
+                        Send
+                    </button>
                 </div>
             </div>
         </div>

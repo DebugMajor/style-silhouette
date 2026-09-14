@@ -204,6 +204,21 @@ Sanjay Suthar
 
 Narayan Hari Singh
 
+AI Trend
+--------
+Photo-to-3D Avatar using Tripo AI.
+
+Setup:
+1. Create Tripo API key at https://platform.tripo3d.ai/
+2. Create `backend/.env` (from `backend/.env.example`)
+3. Add:
+   TRIPO_API_KEY=your_key_here
+4. Start backend (`cd backend && npm start`).
+5. Start frontend (`cd frontend && npm run dev`).
+6. Open AI Trend (`/dashboard/ai-trend`).
+7. Upload full-body image.
+8. Generate 3D avatar.
+
 Project Vision
 
 The long-term goal of Style-A-Silhouette is to evolve into a complete smart wardrobe ecosystem powered by:
