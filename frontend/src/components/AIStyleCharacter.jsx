@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react'
+import { AlertCircle } from 'lucide-react'
 
 const AIStyleCharacter = forwardRef(({ state = 'IDLE', activeText = '', onSpeechEnd }, ref) => {
     const [characterState, setCharacterState] = useState(state) // IDLE | LISTENING | THINKING | SPEAKING | PAUSED
@@ -282,8 +283,9 @@ const AIStyleCharacter = forwardRef(({ state = 'IDLE', activeText = '', onSpeech
                     {activeText || '"Hi! I\'m your personal fashion stylist. Show me your outfit on camera!"'}
                 </div>
                 {noticeMsg && (
-                    <div style={{ fontFamily: 'var(--fm)', fontSize: '10px', color: '#f59e0b', marginTop: '6px' }}>
-                        ⚠️ {noticeMsg}
+                    <div style={{ fontSize: '11px', color: '#f59e0b', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <AlertCircle size={12} />
+                        <span>{noticeMsg}</span>
                     </div>
                 )}
             </div>

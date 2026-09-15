@@ -1,8 +1,46 @@
 const VirtualTryOn = require('../models/VirtualTryOn')
+const { processIdmVton } = require('../services/idmVtonService')
+
+/**
+ * POST /api/virtual-tryon/process
+ * Process Model Photo + Clothing Photo via IDM-VTON
+ */
+const processTryOn = async (req, res) => {
+    try {
+        const { modelImage, clothingImage, category, garmentDescription } = req.body
+
+        if (!modelImage || !clothingImage) {
+            return res.status(400).json({
+                success: false,
+                message: 'Both Model Photo and Clothing Photo are required for IDM-VTON Try-On.'
+            })
+        }
+
+        const result = await processIdmVton({
+            modelImage,
+            clothingImage,
+            category: category || 'upper_body',
+            garmentDescription: garmentDescription || 'fashion clothing'
+        })
+
+        res.json({
+            success: true,
+            message: 'IDM-VTON Virtual Try-On completed successfully!',
+            resultImage: result.resultImage,
+            provider: result.provider
+        })
+    } catch (error) {
+        console.error('Process Virtual Try-On Error:', error)
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to process IDM-VTON Virtual Try-On.'
+        })
+    }
+}
 
 /**
  * POST /api/virtual-tryon/save
- * Save a 2D Virtual Try-On composition for the authenticated user
+ * Save a Virtual Try-On composition for the authenticated user
  */
 const saveTryOn = async (req, res) => {
     try {
@@ -81,7 +119,9 @@ const deleteTryOn = async (req, res) => {
 }
 
 module.exports = {
+    processTryOn,
     saveTryOn,
     getHistory,
     deleteTryOn,
 }
+

@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import AI3DViewer from '../components/AI3DViewer'
+import { Camera, Sparkles, RefreshCw, Shirt, Upload, AlertCircle, CheckCircle, Zap } from 'lucide-react'
 
 const GUIDELINES = [
     'Use a full-body photo',
@@ -11,9 +12,6 @@ const GUIDELINES = [
     'Front-facing photo recommended'
 ]
 
-/**
- * Safely retrieve user JWT Authorization headers
- */
 function getAuthHeaders() {
     try {
         const stored = localStorage.getItem('sas_user')
@@ -33,21 +31,17 @@ export default function AITrend({ hideHeader = false }) {
     const [previewUrl, setPreviewUrl] = useState(null)
     const [errorMsg, setErrorMsg] = useState(null)
 
-    // Developer Test Auth State
     const [testAuthResult, setTestAuthResult] = useState(null)
     const [testingAuth, setTestingAuth] = useState(false)
 
-    // Generation lifecycle state
     const [isGenerating, setIsGenerating] = useState(false)
     const [stageText, setStageText] = useState('')
     const [progress, setProgress] = useState(0)
 
-    // Result state
     const [generatedModel, setGeneratedModel] = useState(null)
     const pollTimerRef = useRef(null)
     const timeoutTimerRef = useRef(null)
 
-    // Cleanup preview URL
     useEffect(() => {
         return () => {
             if (previewUrl) URL.revokeObjectURL(previewUrl)
@@ -66,12 +60,12 @@ export default function AITrend({ hideHeader = false }) {
             if (res.data?.authenticated) {
                 setTestAuthResult({
                     success: true,
-                    message: 'Tripo Connected ✓'
+                    message: 'Tripo Connected'
                 })
             } else {
                 setTestAuthResult({
                     success: false,
-                    message: `Tripo Authentication Failed ✗ (${res.data?.message || 'Unauthorized'})`
+                    message: `Tripo Auth Failed (${res.data?.message || 'Unauthorized'})`
                 })
             }
         } catch (err) {
@@ -79,7 +73,7 @@ export default function AITrend({ hideHeader = false }) {
             const serverMsg = err.response?.data?.message || err.message
             setTestAuthResult({
                 success: false,
-                message: `Tripo Authentication Failed ✗ (${serverMsg})`
+                message: `Tripo Auth Failed (${serverMsg})`
             })
         } finally {
             setTestingAuth(false)
@@ -123,7 +117,6 @@ export default function AITrend({ hideHeader = false }) {
         formData.append('image', selectedFile)
 
         try {
-            // Step 1: Upload photo & Create 3D Task (attach JWT auth headers explicitly)
             const uploadRes = await axios.post('/api/ai-trend/generate-3d', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
@@ -139,7 +132,6 @@ export default function AITrend({ hideHeader = false }) {
             setStageText('Creating AI 3D task...')
             setProgress(15)
 
-            // Step 2: Poll status every 3.5 seconds
             startPolling(taskId)
         } catch (err) {
             console.error('[AITrend] Generation trigger failed:', err)
@@ -149,12 +141,12 @@ export default function AITrend({ hideHeader = false }) {
     }
 
     const startPolling = (taskId) => {
-        const TIMEOUT_MS = 5 * 60 * 1000 // 5-minute timeout protection
+        const TIMEOUT_MS = 5 * 60 * 1000
 
         timeoutTimerRef.current = setTimeout(() => {
             if (pollTimerRef.current) clearInterval(pollTimerRef.current)
             setIsGenerating(false)
-            setErrorMsg('3D model is taking longer than expected. Please try again.')
+            setErrorMsg('3D model processing timed out. Please try again.')
         }, TIMEOUT_MS)
 
         pollTimerRef.current = setInterval(async () => {
@@ -219,308 +211,135 @@ export default function AITrend({ hideHeader = false }) {
     }
 
     return (
-        <div style={{ padding: hideHeader ? '0' : '40px', maxWidth: '1200px', margin: '0 auto', color: 'var(--t1)' }}>
-            {/* Header */}
+        <div style={{ padding: hideHeader ? '0' : '32px 36px', maxWidth: '1280px', margin: '0 auto' }}>
             {!hideHeader && (
-                <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                        <div style={{
-                            fontFamily: 'var(--fm)', fontSize: '10px', letterSpacing: '.25em',
-                            textTransform: 'uppercase', color: 'var(--r)', marginBottom: '8px'
-                        }}>
-                            AI TREND STUDIO
-                        </div>
-                        <h1 style={{ fontFamily: 'var(--fp)', fontSize: '32px', fontWeight: 700, fontStyle: 'italic', margin: 0 }}>
-                            Photo → AI 3D Avatar
-                        </h1>
-                        <p style={{ fontFamily: 'var(--fg)', fontSize: '14px', color: 'var(--t2)', marginTop: '6px' }}>
-                            Turn your full-body photo into a personalized AI 3D avatar.
+                        <h1 className="page-title" style={{ margin: 0 }}>Trend Studio</h1>
+                        <p className="page-subtitle" style={{ marginTop: '4px', margin: 0 }}>
+                            Transform full-body photos into realistic interactive AI 3D avatars.
                         </p>
                     </div>
 
-                    {/* Developer Diagnostic Test Button */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-                        <button
-                            onClick={handleTestAuth}
-                            disabled={testingAuth}
-                            style={{
-                                padding: '8px 16px',
-                                background: 'rgba(255,255,255,0.05)',
-                                border: '1px solid rgba(255,255,255,0.15)',
-                                borderRadius: '4px',
-                                color: 'var(--t2)',
-                                fontFamily: 'var(--fg)',
-                                fontSize: '11px',
-                                fontWeight: 600,
-                                cursor: 'pointer'
-                            }}
-                        >
-                            {testingAuth ? 'Testing Connection...' : '🔌 Test Tripo Connection'}
-                        </button>
-
-                        {testAuthResult && (
-                            <div style={{
-                                fontSize: '11px',
-                                fontFamily: 'var(--fm)',
-                                fontWeight: 600,
-                                color: testAuthResult.success ? '#10b981' : '#f87171',
-                                padding: '4px 8px',
-                                background: testAuthResult.success ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                                borderRadius: '4px',
-                                border: `1px solid ${testAuthResult.success ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
-                            }}>
-                                {testAuthResult.message}
-                            </div>
-                        )}
-                    </div>
+                    <button onClick={handleTestAuth} disabled={testingAuth} className="btn btn-secondary btn-sm">
+                        <Zap size={14} />
+                        <span>{testingAuth ? 'Testing...' : 'Test Tripo Engine'}</span>
+                    </button>
                 </div>
             )}
 
-            {/* Main Content Card */}
-            <div style={{
-                background: 'rgba(8,3,3,.85)',
-                border: '1px solid rgba(220,20,60,.18)',
-                borderRadius: '4px',
-                padding: '32px',
-                backdropFilter: 'blur(20px)',
-                position: 'relative'
-            }}>
+            <div className="card">
                 {errorMsg && (
-                    <div style={{
-                        padding: '12px 18px',
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        border: '1px solid rgba(239, 68, 68, 0.3)',
-                        borderRadius: '4px',
-                        color: '#f87171',
-                        fontFamily: 'var(--fg)',
-                        fontSize: '13px',
-                        marginBottom: '24px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
-                    }}>
-                        <span>⚠️ &nbsp; {errorMsg}</span>
-                        <button
-                            onClick={() => setErrorMsg(null)}
-                            style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '14px' }}
-                        >
-                            ✕
-                        </button>
+                    <div className="alert alert-error">
+                        <AlertCircle size={16} />
+                        <span style={{ flex: 1 }}>{errorMsg}</span>
+                        <button onClick={() => setErrorMsg(null)} style={{ color: 'inherit' }}>✕</button>
                     </div>
                 )}
 
-                {/* View 1: Generated 3D Avatar Display */}
                 {generatedModel ? (
                     <div>
-                        <div style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,.06)', paddingBottom: '16px'
-                        }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
                             <div>
-                                <h2 style={{ fontFamily: 'var(--fp)', fontSize: '20px', fontStyle: 'italic', margin: 0 }}>
+                                <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
                                     AI Generated 3D Avatar
                                 </h2>
-                                <span style={{ fontFamily: 'var(--fm)', fontSize: '10px', color: '#10b981', letterSpacing: '.1em' }}>
-                                    ✓ GENERATION COMPLETE
+                                <span style={{ fontSize: '11px', color: '#4ADE80', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                                    <CheckCircle size={12} />
+                                    <span>Generation Complete</span>
                                 </span>
                             </div>
 
-                            <div style={{ display: 'flex', gap: '12px' }}>
-                                <button
-                                    onClick={handleReset}
-                                    className="btn"
-                                    style={{ padding: '10px 20px', fontSize: '12px' }}
-                                >
-                                    ↺ Generate Again
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button onClick={handleReset} className="btn btn-secondary btn-sm">
+                                    <RefreshCw size={14} />
+                                    <span>Generate Again</span>
                                 </button>
-
-                                <button
-                                    onClick={handleUseInTryOn}
-                                    className="btn bp"
-                                    style={{ padding: '10px 22px', fontSize: '12px' }}
-                                >
-                                    ✂ Use in Virtual Try-On →
+                                <button onClick={handleUseInTryOn} className="btn btn-primary btn-sm">
+                                    <Shirt size={14} />
+                                    <span>Use in Virtual Try-On</span>
                                 </button>
                             </div>
                         </div>
 
-                        {/* 3D Model Viewer Component */}
-                        <div style={{ height: '580px', width: '100%', borderRadius: '6px', overflow: 'hidden' }}>
+                        <div style={{ height: '560px', width: '100%', borderRadius: 'var(--radius-md)', overflow: 'hidden', background: 'var(--bg-secondary)' }}>
                             <AI3DViewer modelUrl={generatedModel.url} />
                         </div>
                     </div>
                 ) : isGenerating ? (
-                    /* View 2: Generation Progress */
-                    <div style={{
-                        padding: '60px 20px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        textAlign: 'center'
-                    }}>
-                        <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'pulse 1.5s ease-in-out infinite' }}>
-                            🪄
-                        </div>
-
-                        <h3 style={{ fontFamily: 'var(--fp)', fontSize: '22px', fontStyle: 'italic', marginBottom: '8px' }}>
+                    <div style={{ padding: '60px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', border: '3px solid var(--border)', borderTopColor: 'var(--accent)', animation: 'spin 0.8s linear infinite', marginBottom: '20px' }} />
+                        
+                        <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
                             {stageText}
                         </h3>
 
-                        <p style={{ fontFamily: 'var(--fg)', fontSize: '13px', color: 'var(--t2)', maxWidth: '400px', marginBottom: '24px' }}>
-                            Tripo AI is constructing high-fidelity geometry and textures from your photo.
+                        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '400px', marginBottom: '24px', lineHeight: 1.5 }}>
+                            Constructing high-fidelity 3D avatar geometry and textures.
                         </p>
 
-                        {/* Progress Bar */}
-                        <div style={{
-                            width: '100%',
-                            maxWidth: '420px',
-                            height: '6px',
-                            background: 'rgba(255,255,255,0.06)',
-                            borderRadius: '3px',
-                            overflow: 'hidden',
-                            position: 'relative'
-                        }}>
-                            <div style={{
-                                width: `${progress}%`,
-                                height: '100%',
-                                background: 'linear-gradient(90deg, var(--rd), var(--r))',
-                                transition: 'width 0.4s ease'
-                            }} />
+                        <div style={{ width: '100%', maxWidth: '360px', height: '4px', background: 'var(--bg-secondary)', borderRadius: '2px', overflow: 'hidden', marginBottom: '8px' }}>
+                            <div style={{ width: `${progress}%`, height: '100%', background: 'var(--accent)', transition: 'width 0.4s ease' }} />
                         </div>
-
-                        <span style={{ fontFamily: 'var(--fm)', fontSize: '11px', color: 'var(--r)', marginTop: '10px' }}>
-                            {progress}% completed
-                        </span>
+                        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent)' }}>{progress}%</span>
                     </div>
                 ) : (
-                    /* View 3: Upload & Instructions Form */
                     <div style={{ display: 'grid', gridTemplateColumns: previewUrl ? '1fr 1fr' : '1fr 340px', gap: '32px' }}>
-                        {/* Left Column: Upload Area */}
                         <div>
-                            <div style={{
-                                fontFamily: 'var(--fm)', fontSize: '9px', letterSpacing: '.2em',
-                                textTransform: 'uppercase', color: 'var(--t3)', marginBottom: '12px'
-                            }}>
-                                CREATE YOUR 3D AVATAR
+                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '12px' }}>
+                                Upload Full-Body Photo
                             </div>
 
                             {!previewUrl ? (
                                 <label style={{
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    height: '340px',
-                                    border: '2px dashed rgba(220,20,60,.3)',
-                                    borderRadius: '6px',
-                                    background: 'rgba(220,20,60,.02)',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.25s'
-                                }}
-                                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--r)'; e.currentTarget.style.background = 'rgba(220,20,60,.05)' }}
-                                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(220,20,60,.3)'; e.currentTarget.style.background = 'rgba(220,20,60,.02)' }}
-                                >
-                                    <input
-                                        type="file"
-                                        accept="image/jpeg,image/jpg,image/png,image/webp"
-                                        onChange={handleFileSelect}
-                                        style={{ display: 'none' }}
-                                    />
-                                    <div style={{ fontSize: '40px', marginBottom: '12px' }}>📷</div>
-                                    <span style={{ fontFamily: 'var(--fg)', fontSize: '14px', fontWeight: 600, color: 'var(--t1)' }}>
-                                        Upload Photo
-                                    </span>
-                                    <span style={{ fontFamily: 'var(--fm)', fontSize: '10px', color: 'var(--t3)', marginTop: '6px' }}>
-                                        Supports JPG, PNG, WebP (Max 10MB)
-                                    </span>
+                                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                                    height: '320px', border: '2px dashed var(--border)', borderRadius: 'var(--radius-lg)',
+                                    background: 'var(--bg-secondary)', cursor: 'pointer', transition: 'var(--transition)'
+                                }}>
+                                    <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" onChange={handleFileSelect} style={{ display: 'none' }} />
+                                    <div style={{ width: '48px', height: '48px', borderRadius: 'var(--radius-md)', background: 'var(--accent-dim)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '14px' }}>
+                                        <Upload size={24} />
+                                    </div>
+                                    <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>Select Photo</span>
+                                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>JPG, PNG, or WebP (Max 10MB)</span>
                                 </label>
                             ) : (
-                                <div style={{ position: 'relative', height: '340px', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(220,20,60,.2)' }}>
-                                    <img
-                                        src={previewUrl}
-                                        alt="Preview"
-                                        style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#050202' }}
-                                    />
-                                    <button
-                                        onClick={handleReset}
-                                        style={{
-                                            position: 'absolute', top: '12px', right: '12px',
-                                            background: 'rgba(5,2,2,0.8)', border: '1px solid rgba(255,255,255,0.2)',
-                                            color: '#fff', padding: '6px 12px', borderRadius: '4px',
-                                            fontSize: '11px', cursor: 'pointer'
-                                        }}
-                                    >
+                                <div style={{ position: 'relative', height: '320px', borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--bg-secondary)' }}>
+                                    <img src={previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                    <button onClick={handleReset} className="btn btn-secondary btn-sm" style={{ position: 'absolute', top: '12px', right: '12px' }}>
                                         Change Photo
                                     </button>
                                 </div>
                             )}
 
-                            {/* Action Button */}
                             <button
                                 onClick={handleGenerate}
                                 disabled={!selectedFile}
-                                className="btn bp"
-                                style={{
-                                    width: '100%',
-                                    marginTop: '20px',
-                                    padding: '14px',
-                                    fontSize: '13px',
-                                    fontWeight: 700,
-                                    letterSpacing: '.05em',
-                                    opacity: selectedFile ? 1 : 0.4,
-                                    cursor: selectedFile ? 'pointer' : 'not-allowed'
-                                }}
+                                className="btn btn-primary"
+                                style={{ width: '100%', marginTop: '20px', padding: '12px' }}
                             >
-                                ⚡ Generate 3D Avatar
+                                <Sparkles size={16} />
+                                <span>Generate 3D Avatar</span>
                             </button>
                         </div>
 
-                        {/* Right Column: Instructions */}
-                        <div style={{
-                            background: 'rgba(255,255,255,.02)',
-                            border: '1px solid rgba(255,255,255,.05)',
-                            borderRadius: '6px',
-                            padding: '24px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'space-between'
-                        }}>
+                        <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                             <div>
-                                <h3 style={{ fontFamily: 'var(--fg)', fontSize: '14px', fontWeight: 600, marginBottom: '16px', color: 'var(--t1)' }}>
-                                    Photo Guidelines
-                                </h3>
-
-                                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                                <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '16px' }}>Photo Guidelines</h3>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                     {GUIDELINES.map((item, idx) => (
-                                        <li key={idx} style={{
-                                            display: 'flex',
-                                            alignItems: 'flex-start',
-                                            gap: '10px',
-                                            fontFamily: 'var(--fg)',
-                                            fontSize: '12px',
-                                            color: 'var(--t2)',
-                                            marginBottom: '14px'
-                                        }}>
-                                            <span style={{ color: 'var(--r)', fontWeight: 700 }}>✓</span>
+                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                                            <CheckCircle size={14} color="var(--accent)" />
                                             <span>{item}</span>
-                                        </li>
+                                        </div>
                                     ))}
-                                </ul>
+                                </div>
                             </div>
 
-                            <div style={{
-                                padding: '14px',
-                                background: 'rgba(220,20,60,.05)',
-                                border: '1px solid rgba(220,20,60,.15)',
-                                borderRadius: '4px',
-                                marginTop: '20px'
-                            }}>
-                                <div style={{ fontFamily: 'var(--fm)', fontSize: '9px', color: 'var(--r)', letterSpacing: '.15em', textTransform: 'uppercase' }}>
-                                    PRO TIP
-                                </div>
-                                <div style={{ fontFamily: 'var(--fg)', fontSize: '11px', color: 'var(--t2)', marginTop: '4px', lineHeight: 1.4 }}>
-                                    Clear full-body portraits with good contrast against simple backgrounds produce the highest accuracy 3D avatars.
+                            <div style={{ padding: '14px', background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-md)', marginTop: '20px' }}>
+                                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>PRO TIP</div>
+                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.5 }}>
+                                    Well-lit full body photos with clear background separation generate the highest quality 3D avatars.
                                 </div>
                             </div>
                         </div>

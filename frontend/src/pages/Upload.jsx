@@ -1,28 +1,98 @@
-/* ── Upload.jsx ─────────────────────────────────────────
-   Apply the same SAS_Ultra panel pattern:
-   - outer div: padding 36px 40px, zIndex 1
-   - page header: ol-r overline + Playfair title
-   - content in glass panels: background rgba(8,3,3,.8), border 1px solid var(--b), borderRadius 2px
-   ─────────────────────────────────────────────────────── */
+import React from 'react';
+import { UploadCloud, Clock, Sparkles } from 'lucide-react';
 
 export default function Upload() {
-    return (
-        <div style={{ padding: '36px 40px', position: 'relative', zIndex: 1 }}>
-            <div style={{ marginBottom: '24px' }}>
-                <div className="ol-r">Upload</div>
-                <div style={{ fontFamily: 'var(--fp)', fontSize: '36px', fontWeight: 700, fontStyle: 'italic', marginTop: '6px' }}>
-                    <span style={{ color: 'var(--r)' }}>Upload</span> Studio
-                </div>
-            </div>
-
-            <div style={{ padding: '40px', background: 'rgba(8,3,3,.8)', border: '1px solid var(--b)', borderRadius: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px' }}>
-                <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontFamily: 'var(--fp)', fontSize: '18px', fontStyle: 'italic', color: 'var(--t2)', marginBottom: '8px' }}>
-                        Upload — coming in Phase 2
-                    </div>
-                    <div className="ol">Feature under development</div>
-                </div>
-            </div>
+  return (
+    <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      {/* Page Header */}
+      <div>
+        <div style={{
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: 'var(--accent)',
+          marginBottom: '0.25rem'
+        }}>
+          MEDIA HUB
         </div>
-    )
+        <h1 style={{
+          fontSize: '2rem',
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+          letterSpacing: '-0.02em',
+          margin: 0
+        }}>
+          Batch Upload Studio
+        </h1>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginTop: '0.35rem' }}>
+          Bulk image processing and garment extraction pipeline.
+        </p>
+      </div>
+
+      {/* Main Card */}
+      <div style={{
+        backgroundColor: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: '12px',
+        padding: '3rem 2rem',
+        textAlign: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justify: 'center',
+        minHeight: '340px'
+      }}>
+        <div style={{
+          width: '56px',
+          height: '56px',
+          borderRadius: '50%',
+          backgroundColor: 'rgba(183, 110, 121, 0.1)',
+          border: '1px solid rgba(183, 110, 121, 0.2)',
+          display: 'flex',
+          alignItems: 'center',
+          justify: 'center',
+          marginBottom: '1.25rem',
+          color: 'var(--accent)'
+        }}>
+          <UploadCloud size={24} />
+        </div>
+
+        <h2 style={{
+          fontSize: '1.25rem',
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+          marginBottom: '0.5rem'
+        }}>
+          Batch Upload & Automatic Tagging
+        </h2>
+        
+        <p style={{
+          fontSize: '0.9rem',
+          color: 'var(--text-secondary)',
+          maxWidth: '440px',
+          lineHeight: '1.5',
+          marginBottom: '1.5rem'
+        }}>
+          High-resolution bulk uploading with AI garment segmentation and automated metadata cataloging is currently in scheduled deployment.
+        </p>
+
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          padding: '0.4rem 0.85rem',
+          backgroundColor: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid var(--border)',
+          borderRadius: '9999px',
+          fontSize: '0.8rem',
+          color: 'var(--text-secondary)'
+        }}>
+          <Clock size={14} style={{ color: 'var(--accent)' }} />
+          <span>Scheduled for Phase 2 Rollout</span>
+        </div>
+      </div>
+    </div>
+  );
 }
+

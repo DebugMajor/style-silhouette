@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { Loader2, AlertTriangle } from 'lucide-react'
 
 export default function AI3DViewer({ modelUrl, initialView = 'Front' }) {
     const mountRef = useRef(null)
@@ -269,12 +270,12 @@ export default function AI3DViewer({ modelUrl, initialView = 'Front' }) {
                     color: '#ffffff',
                     zIndex: 20
                 }}>
-                    <div style={{ fontSize: '32px', marginBottom: '12px', animation: 'spin 1.2s linear infinite' }}>✨</div>
-                    <div style={{ fontFamily: 'var(--fg)', fontSize: '14px', fontWeight: 600, color: 'var(--t1)' }}>
+                    <Loader2 size={32} className="spin-icon" style={{ color: 'var(--accent)', marginBottom: '12px' }} />
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                         Loading 3D Avatar...
                     </div>
                     {progress > 0 && (
-                        <div style={{ fontFamily: 'var(--fm)', fontSize: '11px', color: 'var(--r)', marginTop: '6px' }}>
+                        <div style={{ fontSize: '12px', color: 'var(--accent)', marginTop: '6px' }}>
                             {progress}% downloaded
                         </div>
                     )}
@@ -286,7 +287,7 @@ export default function AI3DViewer({ modelUrl, initialView = 'Front' }) {
                 <div style={{
                     position: 'absolute',
                     inset: 0,
-                    background: 'rgba(3,7,18,0.92)',
+                    background: 'rgba(11,11,13,0.92)',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -295,11 +296,11 @@ export default function AI3DViewer({ modelUrl, initialView = 'Front' }) {
                     textAlign: 'center',
                     zIndex: 20
                 }}>
-                    <div style={{ fontSize: '36px', marginBottom: '12px' }}>⚠️</div>
-                    <div style={{ fontFamily: 'var(--fg)', fontSize: '14px', fontWeight: 700, color: '#ef4444', marginBottom: '6px' }}>
+                    <AlertTriangle size={36} style={{ color: '#ef4444', marginBottom: '12px' }} />
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#ef4444', marginBottom: '6px' }}>
                         {errorMsg}
                     </div>
-                    <div style={{ fontFamily: 'var(--fm)', fontSize: '11px', color: 'var(--t3)', maxWidth: '300px' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '300px' }}>
                         Please try generating the model again or upload a different image.
                     </div>
                 </div>

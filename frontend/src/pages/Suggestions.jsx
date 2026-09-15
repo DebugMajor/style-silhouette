@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { Sparkles, TrendingUp, Mic } from 'lucide-react'
 import AITrend from './AITrend'
 import Voice from './Voice'
 
@@ -33,106 +34,81 @@ export default function Suggestions() {
     }
 
     return (
-        <div style={{ padding: '36px 40px', position: 'relative', zIndex: 1, maxWidth: '1350px', margin: '0 auto' }}>
-            {/* Header with Integrated Feature Switcher */}
+        <div style={{ padding: '32px 36px', maxWidth: '1280px', margin: '0 auto' }}>
+            {/* Header with Feature Switcher */}
             <div style={{ marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '16px' }}>
                 <div>
-                    <div className="ol-r">AI STYLING ECOSYSTEM</div>
-                    <div style={{ fontFamily: 'var(--fp)', fontSize: '34px', fontWeight: 700, fontStyle: 'italic', marginTop: '6px' }}>
-                        <span style={{ color: 'var(--r)' }}>AI Suggestions</span> Studio
-                    </div>
+                    <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                        AI Studio
+                    </h1>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: '4px', margin: 0, fontSize: '0.9rem' }}>
+                        Your intelligent fashion workspace.
+                    </p>
                 </div>
 
-                {/* Sub-Feature Navigation Tabs */}
+                {/* Sub-Feature Navigation Pills */}
                 <div style={{
-                    display: 'flex',
-                    gap: '6px',
-                    background: 'rgba(8,3,3,.85)',
-                    border: '1px solid var(--b)',
-                    padding: '4px',
-                    borderRadius: '24px',
-                    flexWrap: 'wrap'
+                    display: 'flex', gap: '6px',
+                    background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                    padding: '4px', borderRadius: 'var(--radius-sm)', flexWrap: 'wrap'
                 }}>
                     <button
                         onClick={() => handleTabChange('style')}
-                        style={{
-                            padding: '8px 18px',
-                            borderRadius: '20px',
-                            background: activeTab === 'style' ? 'linear-gradient(135deg, var(--rd), var(--r))' : 'transparent',
-                            border: activeTab === 'style' ? '1px solid var(--r)' : '1px solid transparent',
-                            color: activeTab === 'style' ? '#ffffff' : 'var(--t2)',
-                            fontFamily: 'var(--fg)',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s'
-                        }}
+                        className={`btn btn-sm ${activeTab === 'style' ? 'btn-primary' : 'btn-ghost'}`}
                     >
-                        ✦ AI Style Suggestions
+                        <Sparkles size={14} />
+                        <span>AI Style</span>
                     </button>
 
                     <button
                         onClick={() => handleTabChange('trend')}
-                        style={{
-                            padding: '8px 18px',
-                            borderRadius: '20px',
-                            background: activeTab === 'trend' ? 'linear-gradient(135deg, var(--rd), var(--r))' : 'transparent',
-                            border: activeTab === 'trend' ? '1px solid var(--r)' : '1px solid transparent',
-                            color: activeTab === 'trend' ? '#ffffff' : 'var(--t2)',
-                            fontFamily: 'var(--fg)',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s'
-                        }}
+                        className={`btn btn-sm ${activeTab === 'trend' ? 'btn-primary' : 'btn-ghost'}`}
                     >
-                        ⚡ AI Trend Studio (Photo → 3D Avatar)
+                        <TrendingUp size={14} />
+                        <span>AI Trends</span>
                     </button>
 
                     <button
                         onClick={() => handleTabChange('speaker')}
-                        style={{
-                            padding: '8px 18px',
-                            borderRadius: '20px',
-                            background: activeTab === 'speaker' ? 'linear-gradient(135deg, var(--rd), var(--r))' : 'transparent',
-                            border: activeTab === 'speaker' ? '1px solid var(--r)' : '1px solid transparent',
-                            color: activeTab === 'speaker' ? '#ffffff' : 'var(--t2)',
-                            fontFamily: 'var(--fg)',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s'
-                        }}
+                        className={`btn btn-sm ${activeTab === 'speaker' ? 'btn-primary' : 'btn-ghost'}`}
                     >
-                        🎙️ AI Style Speaker (Real-Time AI Stylist)
+                        <Mic size={14} />
+                        <span>AI Stylist</span>
                     </button>
                 </div>
             </div>
 
-            {/* Feature 1: AI Style Suggestions (Existing functionality) */}
+            {/* Feature 1: Style Analysis Overview */}
             {activeTab === 'style' && (
-                <div style={{ padding: '40px', background: 'rgba(8,3,3,.8)', border: '1px solid var(--b)', borderRadius: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '360px' }}>
-                    <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '36px', marginBottom: '12px', color: 'var(--r)' }}>✦</div>
-                        <div style={{ fontFamily: 'var(--fp)', fontSize: '22px', fontStyle: 'italic', color: 'var(--t1)', marginBottom: '8px' }}>
-                            AI Style Suggestions
-                        </div>
-                        <p style={{ fontFamily: 'var(--fg)', fontSize: '13px', color: 'var(--t2)', maxWidth: '440px', margin: '0 auto 16px', lineHeight: 1.5 }}>
-                            Receive intelligent outfit combinations, color recommendations, and styling tips personalized to your wardrobe.
-                        </p>
-                        <div className="ol">Feature active & expanding in Phase 2</div>
+                <div className="card" style={{ padding: '48px 32px', textAlign: 'center', minHeight: '360px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: 'var(--radius-md)', background: 'var(--accent-dim)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+                        <Sparkles size={24} />
+                    </div>
+                    <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                        AI Style Analysis
+                    </h2>
+                    <p style={{ fontSize: '14px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto 24px', lineHeight: 1.6 }}>
+                        Analyze your outfit and receive personalized styling recommendations, color harmony scores, and wardrobe combination tips.
+                    </p>
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <button onClick={() => handleTabChange('trend')} className="btn btn-secondary">
+                            <span>Open Trend Studio</span>
+                        </button>
+                        <button onClick={() => handleTabChange('speaker')} className="btn btn-primary">
+                            <span>Talk to AI Stylist</span>
+                        </button>
                     </div>
                 </div>
             )}
 
-            {/* Feature 2: AI Trend Studio (Photo → AI 3D Avatar) */}
+            {/* Feature 2: AI Trend Studio */}
             {activeTab === 'trend' && (
                 <div>
                     <AITrend hideHeader={true} />
                 </div>
             )}
 
-            {/* Feature 3: AI Style Speaker (Real-Time 3D AI Fashion Stylist) */}
+            {/* Feature 3: AI Style Speaker */}
             {activeTab === 'speaker' && (
                 <div>
                     <Voice />

@@ -1,7 +1,7 @@
-import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 
+import CustomCursor from './components/CustomCursor'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -14,39 +14,6 @@ import Suggestions from './pages/Suggestions'
 import Voice from './pages/Voice'
 import VirtualTryOn from './pages/VirtualTryOn'
 import AITrend from './pages/AITrend'
-
-/* ── Lerp cursor controller ─────────────────────────────── */
-function CursorController() {
-    useEffect(() => {
-        const cur = document.getElementById('cursor')
-        const ring = document.getElementById('cursor-ring')
-        if (!cur || !ring) return
-
-        let mx = 0, my = 0, rx = 0, ry = 0, rafId
-
-        const onMove = (e) => {
-            mx = e.clientX; my = e.clientY
-            cur.style.left = mx + 'px'
-            cur.style.top = my + 'px'
-        }
-
-        const lerp = () => {
-            rx += (mx - rx) * 0.12
-            ry += (my - ry) * 0.12
-            ring.style.left = rx + 'px'
-            ring.style.top = ry + 'px'
-            rafId = requestAnimationFrame(lerp)
-        }
-
-        document.addEventListener('mousemove', onMove)
-        rafId = requestAnimationFrame(lerp)
-        return () => {
-            document.removeEventListener('mousemove', onMove)
-            cancelAnimationFrame(rafId)
-        }
-    }, [])
-    return null
-}
 
 /* ── Protected route guard ──────────────────────────────── */
 function PrivateRoute({ children }) {
@@ -63,7 +30,7 @@ function PublicRoute({ children }) {
 export default function App() {
     return (
         <BrowserRouter>
-            <CursorController />
+            <CustomCursor />
             <Routes>
                 {/* Public */}
                 <Route path="/" element={<Home />} />

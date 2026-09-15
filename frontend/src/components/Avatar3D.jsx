@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { AlertTriangle } from 'lucide-react'
 
 export default function Avatar3D({ activeView = 'Front', selectedClothing = null, customModelUrl = null }) {
     const mountRef = useRef(null)
@@ -395,10 +396,10 @@ export default function Avatar3D({ activeView = 'Front', selectedClothing = null
             {/* Error Message Fallback */}
             {errorMsg && (
                 <div style={{
-                    position: 'absolute', inset: 0, background: 'rgba(2,6,23,0.92)',
+                    position: 'absolute', inset: 0, background: 'rgba(11,11,13,0.92)',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', textAlign: 'center'
                 }}>
-                    <div style={{ fontSize: '32px', marginBottom: '10px' }}>⚠️</div>
+                    <AlertTriangle size={32} style={{ color: '#ef4444', marginBottom: '10px' }} />
                     <div style={{ fontSize: '14px', fontWeight: 700, color: '#ef4444', marginBottom: '6px' }}>{errorMsg}</div>
                 </div>
             )}

@@ -1,6 +1,7 @@
 const express = require('express')
 const authMiddleware = require('../middleware/authMiddleware')
 const {
+    processTryOn,
     saveTryOn,
     getHistory,
     deleteTryOn,
@@ -11,8 +12,10 @@ const router = express.Router()
 // All Virtual Try-On routes are protected by JWT authentication
 router.use(authMiddleware)
 
+router.post('/process', processTryOn)
 router.post('/save', saveTryOn)
 router.get('/history', getHistory)
 router.delete('/:id', deleteTryOn)
 
 module.exports = router
+

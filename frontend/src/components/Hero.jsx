@@ -1,87 +1,119 @@
 import { Link } from 'react-router-dom'
+import { ArrowRight, Shirt, Sparkles, Wand2 } from 'lucide-react'
 
 export default function Hero() {
     return (
         <section id="hero" style={{
+            padding: '72px 24px 96px',
+            maxWidth: '1280px',
+            margin: '0 auto',
             display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            minHeight: 'calc(100vh - 80px)',
-            alignItems: 'center',
-            padding: '0 48px',
-            gap: '48px',
-            position: 'relative',
-            zIndex: 10,
+            gridTemplateColumns: '1.1fr 0.9fr',
+            gap: '56px',
+            alignItems: 'center'
         }}>
-            {/* ── Left copy ── */}
+            {/* Left Copy */}
             <div>
-                <div className="au d1" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '28px' }}>
-                    <div style={{ width: '40px', height: '1px', background: 'var(--r)' }} />
-                    <span style={{ fontFamily: 'var(--fm)', fontSize: '10px', letterSpacing: '.25em', textTransform: 'uppercase', color: 'var(--r)' }}>
-                        AI Fashion Intelligence
-                    </span>
+                <div className="overline-badge" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ width: '20px', height: '1px', backgroundColor: 'var(--accent)' }} />
+                    <span>01 / AUTUMN WINTER 2026 LOOKBOOK</span>
                 </div>
 
-                {/* Glitch headline */}
-                <style>{`
-          .gw::before,.gw::after{content:attr(data-text);position:absolute;left:0;top:0;width:100%;height:100%}
-          .gw::before{color:var(--r);opacity:.7;animation:glitch 4s infinite linear;clip-path:inset(30% 0 50% 0)}
-          .gw::after{color:#0ff;opacity:.3;animation:glitch 4s infinite linear reverse;clip-path:inset(60% 0 20% 0)}
-        `}</style>
-                <div className="au d2" style={{ fontFamily: 'var(--fp)', fontSize: 'clamp(64px,9vw,116px)', fontWeight: 900, lineHeight: .9, letterSpacing: '-.02em', position: 'relative' }}>
-                    <span className="gw" data-text="STYLE" style={{ position: 'relative', display: 'inline-block' }}>STYLE</span>
-                </div>
-                <div className="au d2" style={{ fontFamily: 'var(--fp)', fontSize: 'clamp(64px,9vw,116px)', fontWeight: 400, lineHeight: .9, color: 'var(--t2)', letterSpacing: '-.02em' }}>YOUR</div>
-                <div className="au d2" style={{ fontFamily: 'var(--fp)', fontSize: 'clamp(64px,9vw,116px)', fontWeight: 400, fontStyle: 'italic', lineHeight: .9, color: 'var(--r)', letterSpacing: '-.02em', marginBottom: '40px' }}>
-                    Silhouette.
-                </div>
+                <h1 style={{
+                    fontFamily: 'var(--font-serif)',
+                    fontSize: 'clamp(42px, 5.2vw, 68px)',
+                    fontWeight: 400,
+                    lineHeight: 1.08,
+                    letterSpacing: '-0.02em',
+                    color: 'var(--text-primary)',
+                    marginBottom: '24px'
+                }}>
+                    Elegance Refined by <br />
+                    <span style={{ fontStyle: 'italic', color: 'var(--accent)', fontWeight: 400 }}>Intelligence.</span>
+                </h1>
 
-                <p className="au d3" style={{ fontFamily: 'var(--fg)', fontSize: '15px', fontWeight: 300, color: 'var(--t2)', lineHeight: 1.8, maxWidth: '420px', marginBottom: '40px' }}>
-                    Capture, analyse, and elevate your look with real-time AI outfit intelligence. Your personal fashion engine — powered by Gemini and GPT-4o.
+                <p style={{
+                    fontSize: '1rem',
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.65,
+                    maxWidth: '500px',
+                    marginBottom: '40px',
+                    fontWeight: 300
+                }}>
+                    Experience precision haute couture recommendations, photorealistic IDM-VTON virtual try-on, and real-time AI outfit harmonizing.
                 </p>
 
-                <div className="au d4" style={{ display: 'flex', gap: '12px', marginBottom: '56px', flexWrap: 'wrap' }}>
-                    <Link to="/register" className="btn bp" style={{ padding: '14px 36px', fontSize: '12px' }}>Get Started Free</Link>
-                    <a href="#features" className="btn" style={{ padding: '14px 28px', fontSize: '12px' }}>See Features →</a>
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '60px' }}>
+                    <Link to="/register" className="btn btn-editorial">
+                        <span>EXPLORE AI STUDIO</span>
+                    </Link>
+                    <Link to="/dashboard/virtual-try-on" className="btn btn-secondary btn-lg" style={{ borderRadius: '4px', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>
+                        <Shirt size={14} />
+                        <span>VIRTUAL TRY-ON</span>
+                    </Link>
                 </div>
 
-                {/* Stats row */}
-                <div className="au d5" style={{ display: 'flex', gap: 0 }}>
-                    {[
-                        { val: '2', accent: '.4K', label: 'Outfits Analysed' },
-                        { val: '94', accent: '%', label: 'Accuracy Rate' },
-                        { val: '<', accent: '500', label: 'ms Response' },
-                    ].map(({ val, accent, label }, i) => (
-                        <div key={i} style={{ padding: '20px 32px 20px 0', borderRight: i < 2 ? '1px solid rgba(255,255,255,.06)' : 'none', marginRight: i < 2 ? '32px' : 0 }}>
-                            <div style={{ fontFamily: 'var(--fp)', fontSize: '42px', fontWeight: 700, fontStyle: 'italic', color: 'var(--t1)', lineHeight: 1 }}>
-                                {val}<em style={{ color: 'var(--r)', fontStyle: 'normal' }}>{accent}</em>
-                            </div>
-                            <div style={{ fontFamily: 'var(--fm)', fontSize: '9px', letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--t3)', marginTop: '4px' }}>{label}</div>
-                        </div>
-                    ))}
+                {/* Metrics Row */}
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '24px',
+                    paddingTop: '32px',
+                    borderTop: '1px solid var(--border)'
+                }}>
+                    <div>
+                        <div style={{ fontFamily: 'var(--font-serif)', fontSize: '32px', fontWeight: 400, color: 'var(--text-primary)' }}>2.4K+</div>
+                        <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginTop: '4px' }}>Outfits Analysed</div>
+                    </div>
+                    <div>
+                        <div style={{ fontFamily: 'var(--font-serif)', fontSize: '32px', fontWeight: 400, color: 'var(--text-primary)' }}>94%</div>
+                        <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginTop: '4px' }}>Style Precision</div>
+                    </div>
+                    <div>
+                        <div style={{ fontFamily: 'var(--font-serif)', fontSize: '32px', fontWeight: 400, color: 'var(--text-primary)' }}>&lt;500ms</div>
+                        <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)', marginTop: '4px' }}>Latency</div>
+                    </div>
                 </div>
             </div>
 
-            {/* ── Right — feature preview cards ── */}
-            <div className="au d3" style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '20px 0' }}>
-                {[
-                    { icon: '◎', title: 'Real-time CV', desc: 'Gemini 2.5 Flash detects garments in under 500ms.' },
-                    { icon: '✦', title: 'Style Scoring', desc: 'Colour harmony, occasion fit, trend alignment — scored 0–100.' },
-                    { icon: '◫', title: 'Digital Wardrobe', desc: 'Catalogue every piece. AI remixes them into complete looks.' },
-                    { icon: '◉', title: 'Voice Styling', desc: 'Describe your occasion. GPT-4o builds the outfit.' },
-                ].map(({ icon, title, desc }) => (
-                    <div key={title}
-                        style={{ padding: '20px 24px', background: 'rgba(8,4,4,.85)', border: '1px solid var(--b)', borderRadius: '2px', position: 'relative', overflow: 'hidden', transition: 'all .3s var(--ease)', display: 'flex', gap: '16px', alignItems: 'flex-start' }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(220,20,60,.3)'; e.currentTarget.style.transform = 'translateX(4px)' }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--b)'; e.currentTarget.style.transform = 'translateX(0)' }}
-                    >
-                        <span style={{ fontSize: '22px', color: 'var(--r)', lineHeight: 1, marginTop: '2px', flexShrink: 0 }}>{icon}</span>
+            {/* Right Editorial Photo Frame */}
+            <div style={{ position: 'relative' }}>
+                <div className="valtero-img-frame" style={{ height: '560px', width: '100%', borderRadius: '4px', border: '1px solid var(--border)' }}>
+                    <img 
+                        src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=1000&auto=format&fit=crop" 
+                        alt="High Fashion Editorial Model" 
+                    />
+                    
+                    {/* Floating Editorial Badge */}
+                    <div style={{
+                        position: 'absolute',
+                        bottom: '24px',
+                        left: '24px',
+                        right: '24px',
+                        backgroundColor: 'rgba(13, 13, 14, 0.85)',
+                        backdropFilter: 'blur(12px)',
+                        border: '1px solid var(--border)',
+                        padding: '16px 20px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justify: 'space-between'
+                    }}>
                         <div>
-                            <div style={{ fontFamily: 'var(--fg)', fontSize: '12px', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--t1)', marginBottom: '4px' }}>{title}</div>
-                            <div style={{ fontFamily: 'var(--fg)', fontSize: '12px', color: 'var(--t2)', lineHeight: 1.6 }}>{desc}</div>
+                            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--accent)', fontWeight: 600 }}>
+                                IDM-VTON ARCHITECTURE
+                            </div>
+                            <div style={{ fontFamily: 'var(--font-serif)', fontSize: '15px', color: 'var(--text-primary)', marginTop: '2px' }}>
+                                Couture Garment Synthesis
+                            </div>
                         </div>
+                        <span style={{ fontSize: '11px', letterSpacing: '0.08em', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                            2026 EDITION
+                        </span>
                     </div>
-                ))}
+                </div>
             </div>
         </section>
     )
 }
+
