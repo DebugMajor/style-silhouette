@@ -1,71 +1,125 @@
-const axios = require('axios')
+const path = require('path')
+const fs = require('fs')
 
-/**
- * IDM-VTON Virtual Try-On Service
- * Processes Model Photo + Clothing Photo via IDM-VTON AI Garment Transfer API
- */
-async function processIdmVton({ modelImage, clothingImage, category = 'upper_body', garmentDescription = 'garment' }) {
-    try {
-        if (!modelImage || !clothingImage) {
-            throw new Error('Both Model Photo and Clothing Photo are required for IDM-VTON try-on.')
-        }
+const DEFAULT_TIMEOUT_MS = 180000 // 3 minutes
 
-        console.log(`[idmVtonService] Initiating IDM-VTON processing for category: ${category}`)
+function getWorkerUrl() {
+    const url = (process.env.IDM_VTON_WORKER_URL || '').trim().replace(/\/+$/, '')
+    if (!url) {
+        throw new Error(
+            'IDM_VTON_WORKER_URL is not configured. Run tools/IDM_VTON_Worker.ipynb in Colab and put its public Gradio URL in backend/.env.'
+        )
+    }
+    return url
+}
 
-        // 1. Attempt call to HuggingFace Gradio IDM-VTON Space API if endpoint is available
-        const hfSpaceUrl = process.env.IDM_VTON_API_URL || 'https://yisol-idm-vton.hf.space'
-        try {
-            const apiResponse = await axios.post(`${hfSpaceUrl}/api/predict`, {
-                data: [
-                    { background: modelImage, layers: [], composite: modelImage },
-                    clothingImage,
-                    garmentDescription || 'fashion clothing',
-                    true, // auto-mask
-                    true, // auto-crop
-                    30,   // denoise steps
-                    42    // seed
-                ]
-            }, { timeout: 12000 })
+function dataUrlToBuffer(value) {
+    if (typeof value !== 'string') {
+        throw new Error('Image must be provided as a data URL.')
+    }
 
-            if (apiResponse.data && apiResponse.data.data && apiResponse.data.data[0]) {
-                const resultUrl = apiResponse.data.data[0]
-                const finalResult = typeof resultUrl === 'string' ? resultUrl : resultUrl.url
-                if (finalResult) {
-                    console.log('[idmVtonService] IDM-VTON API success!')
-                    return {
-                        success: true,
-                        resultImage: finalResult,
-                        provider: 'IDM-VTON-HuggingFace'
-                    }
-                }
-            }
-        } catch (apiErr) {
-            console.warn('[idmVtonService] External IDM-VTON API endpoint unreachable or timed out. Falling back to local smart synthesis engine:', apiErr.message)
-        }
+    const match = value.match(/^data:([^;]+);base64,(.+)$/)
+    if (!match) {
+        throw new Error('Virtual Try-On currently expects uploaded images as data URLs.')
+    }
 
-        // 2. Fallback / High-Precision Garment Synthesis Engine
-        // Computes direct garment projection & blend onto human model image
-        const resultImage = await generateSmartComposite(modelImage, clothingImage, category)
-
-        return {
-            success: true,
-            resultImage,
-            provider: 'IDM-VTON-Engine'
-        }
-    } catch (err) {
-        console.error('[idmVtonService] Error:', err.message)
-        throw new Error(err.message || 'IDM-VTON virtual try-on failed to process.')
+    return {
+        mimeType: match[1],
+        buffer: Buffer.from(match[2], 'base64')
     }
 }
 
-/**
- * Fallback Composite Generator for offline/local execution
- * Synthesizes clothing photo onto model photo
- */
-async function generateSmartComposite(modelImage, clothingImage, category) {
-    // Return modelImage as base; the frontend client will also render the high-res composite result
-    // or return the processed data URL structure.
-    return clothingImage || modelImage
+async function fileToDataUrl(file) {
+    if (!file) {
+        throw new Error('IDM-VTON did not return a result image.')
+    }
+
+    if (typeof file === 'string') {
+        if (file.startsWith('data:image/')) return file
+
+        if (/^https?:\/\//i.test(file)) {
+            const response = await fetch(file)
+            if (!response.ok) {
+                throw new Error(`Unable to download IDM-VTON result (${response.status}).`)
+            }
+            const buffer = Buffer.from(await response.arrayBuffer())
+            const contentType = response.headers.get('content-type') || 'image/png'
+            return `data:${contentType};base64,${buffer.toString('base64')}`
+        }
+
+        const absolutePath = path.isAbsolute(file) ? file : path.resolve(process.cwd(), file)
+        if (fs.existsSync(absolutePath)) {
+            const buffer = fs.readFileSync(absolutePath)
+            return `data:image/png;base64,${buffer.toString('base64')}`
+        }
+    }
+
+    if (typeof file === 'object') {
+        if (file.url) return fileToDataUrl(file.url)
+        if (file.path) return fileToDataUrl(file.path)
+        if (file.name) return fileToDataUrl(file.name)
+        if (typeof file.data === 'string') return fileToDataUrl(file.data)
+    }
+
+    throw new Error('IDM-VTON returned an unsupported result image format.')
+}
+
+async function processIdmVton({
+    modelImage,
+    clothingImage,
+    category = 'upper_body',
+    garmentDescription = 'fashion clothing'
+}) {
+    if (!modelImage || !clothingImage) {
+        throw new Error('Both Model Photo and Clothing Photo are required for IDM-VTON try-on.')
+    }
+
+    const workerUrl = getWorkerUrl()
+
+    // The worker is the patched official IDM-VTON Gradio demo from tools/IDM_VTON_Worker.ipynb.
+    // Gradio Client handles image uploads and the queued /tryon prediction correctly.
+    const { Client, handle_file } = await import('@gradio/client')
+
+    const model = dataUrlToBuffer(modelImage)
+    const garment = dataUrlToBuffer(clothingImage)
+
+    const client = await Promise.race([
+        Client.connect(workerUrl),
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Unable to connect to the IDM-VTON worker.')), DEFAULT_TIMEOUT_MS)
+        )
+    ])
+
+    const humanInput = {
+        background: handle_file(model.buffer),
+        layers: [],
+        composite: null
+    }
+
+    const garmentInput = handle_file(garment.buffer)
+
+    const result = await Promise.race([
+        client.predict('/tryon', [
+            humanInput,
+            garmentInput,
+            garmentDescription || category || 'fashion clothing',
+            true,  // auto-generated mask
+            false, // keep original framing by default
+            30,    // denoising steps
+            42     // deterministic seed for a stable demo
+        ]),
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('IDM-VTON generation timed out.')), DEFAULT_TIMEOUT_MS)
+        )
+    ])
+
+    const resultImage = await fileToDataUrl(result?.data?.[0])
+
+    return {
+        success: true,
+        resultImage,
+        provider: 'IDM-VTON-Colab-Worker'
+    }
 }
 
 module.exports = {
