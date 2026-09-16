@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import Avatar3D from '../components/Avatar3D'
+import TryOnAdjuster from '../components/TryOnAdjuster'
 import {
     Camera,
     Check,
     Download,
     Layers,
+    Move,
     RefreshCw,
     Save,
     Sparkles,
@@ -34,6 +36,7 @@ export default function VirtualTryOn() {
     const [garmentName, setGarmentName] = useState('')
     const [category, setCategory] = useState('upper_body')
     const [resultImage, setResultImage] = useState(null)
+    const [isAdjusting, setIsAdjusting] = useState(false)
     const [processing, setProcessing] = useState(false)
     const [saving, setSaving] = useState(false)
     const [status, setStatus] = useState(null)
@@ -231,6 +234,7 @@ export default function VirtualTryOn() {
         setGarmentName('')
         setResultImage(null)
         setStatus(null)
+        setIsAdjusting(false)
     }
 
     return (
@@ -276,7 +280,25 @@ export default function VirtualTryOn() {
 
             {mode === 'IDM-VTON' ? (
                 <>
+                    {/* CUSTOM RESIZE AND MOVE INTERACTIVE EDITOR */}
+                    {isAdjusting && modelImage && clothingImage && (
+                        <div style={{ marginBottom: 24 }}>
+                            <TryOnAdjuster
+                                modelPhoto={modelImage}
+                                clothingPhoto={clothingImage}
+                                category={category}
+                                onApply={(newImage) => {
+                                    setResultImage(newImage)
+                                    setIsAdjusting(false)
+                                    message('Custom position & scale applied to Try-On result!', 'success')
+                                }}
+                                onClose={() => setIsAdjusting(false)}
+                            />
+                        </div>
+                    )}
+
                     <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
+                        {/* STEP 1: MODEL PHOTO */}
                         <div className="card">
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 14 }}>
                                 <div>
@@ -336,6 +358,7 @@ export default function VirtualTryOn() {
                             </div>
                         </div>
 
+                        {/* STEP 2: CLOTHING PHOTO */}
                         <div className="card">
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 14 }}>
                                 <div>
@@ -415,21 +438,35 @@ export default function VirtualTryOn() {
                             </div>
                         </div>
 
+                        {/* STEP 3: AI RESULT */}
                         <div className="card">
                             <div style={{ marginBottom: 14 }}>
                                 <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-muted)' }}>Step 3</div>
                                 <h2 style={{ margin: '4px 0 0', fontSize: 18 }}>AI Result</h2>
                             </div>
 
-                            <button
-                                className="btn btn-primary"
-                                style={{ width: '100%', marginBottom: 12 }}
-                                onClick={generateTryOn}
-                                disabled={processing || !modelImage || !clothingImage}
-                            >
-                                <Sparkles size={16} />
-                                {processing ? 'Generating with IDM-VTON...' : 'Generate Virtual Try-On'}
-                            </button>
+                            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                                <button
+                                    className="btn btn-primary"
+                                    style={{ flex: 1 }}
+                                    onClick={generateTryOn}
+                                    disabled={processing || !modelImage || !clothingImage}
+                                >
+                                    <Sparkles size={16} />
+                                    {processing ? 'Generating...' : 'Generate Try-On'}
+                                </button>
+
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={() => setIsAdjusting(true)}
+                                    disabled={!modelImage || !clothingImage}
+                                    title="Custom resize & move garment position"
+                                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                                >
+                                    <Move size={15} />
+                                    Resize & Move
+                                </button>
+                            </div>
 
                             <div style={{
                                 minHeight: 360,
@@ -463,15 +500,18 @@ export default function VirtualTryOn() {
                             </div>
 
                             {resultImage && (
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 12 }}>
-                                    <button className="btn btn-primary btn-sm" onClick={downloadResult}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 12 }}>
+                                    <button className="btn btn-primary btn-sm" onClick={downloadResult} title="Download try-on result">
                                         <Download size={14} /> Download
                                     </button>
-                                    <button className="btn btn-secondary btn-sm" onClick={saveResult} disabled={saving}>
+                                    <button className="btn btn-secondary btn-sm" onClick={() => setIsAdjusting(true)} style={{ borderColor: 'var(--accent)' }} title="Custom resize & move garment">
+                                        <Move size={14} color="var(--accent)" /> Adjust Fit
+                                    </button>
+                                    <button className="btn btn-secondary btn-sm" onClick={saveResult} disabled={saving} title="Save look to history">
                                         <Save size={14} /> {saving ? 'Saving...' : 'Save'}
                                     </button>
-                                    <button className="btn btn-secondary btn-sm" onClick={clearSession}>
-                                        <RefreshCw size={14} /> New Try-On
+                                    <button className="btn btn-secondary btn-sm" onClick={clearSession} title="Start new try-on session">
+                                        <RefreshCw size={14} /> New
                                     </button>
                                 </div>
                             )}
