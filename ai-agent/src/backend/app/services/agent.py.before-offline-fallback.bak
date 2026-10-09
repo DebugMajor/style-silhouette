@@ -1,0 +1,77 @@
+import os
+from langsmith import traceable, get_current_run_tree
+from src.backend.app.models.schemas import AgentResponse, State
+from jinja2 import Template
+import instructor
+from litellm import completion
+from langchain_core.messages import convert_to_openai_messages
+from src.backend.app.utils.utils import format_ai_message
+from src.backend.app.config import settings
+from src.backend.app.dependencies import deps
+
+
+@traceable(
+    name="agent_node",
+    run_type="llm",
+    metadata={
+        "ls_provider": "openai",
+        "ls_model_name": settings.llm_model
+    },
+)
+def agent_node(state: State) -> dict:
+    # BaseSettings reads .env but does not export its values to os.environ; LiteLLM reads OPENAI_API_KEY from the process environment.
+    os.environ["OPENAI_API_KEY"] = settings.openai_api_key
+
+
+    # Load the prompt through the project's prompt manager so this works on Windows and other contributors' machines.
+    prompt_template = deps.prompt_manager.get_prompt("agent")
+    if not prompt_template:
+        raise RuntimeError("Agent prompt is empty. Check ai-agent/prompts/agent.yaml.")
+
+    template = Template(prompt_template)
+
+    prompt = template.render(available_tools=state.available_tools)
+
+    conversations = []
+    messages = state.messages
+
+    for message in messages:
+        conversations.append(convert_to_openai_messages(message))
+
+    # Pydantic reads .env into settings but does not export values to LiteLLM's process env.
+    # Set both supported Gemini key names from the loaded settings without logging the secret.
+    if settings.google_api_key:
+        os.environ["GEMINI_API_KEY"] = settings.google_api_key
+        os.environ["GOOGLE_API_KEY"] = settings.google_api_key
+
+    client = instructor.from_litellm(completion)
+    response, raw_response = client.chat.completions.create_with_completion(
+        model=settings.llm_model,
+        response_model=AgentResponse,
+        messages=[{
+            "role": "system",
+            "content": prompt
+        }, *conversations],
+    )
+
+    ai_message = format_ai_message(response)
+    for image in (response.images or []):
+        state.images.append(image)
+
+    current_run = get_current_run_tree()
+
+    if current_run:
+        current_run.metadata["usage_metadata"] = {
+            "input_tokens": raw_response.usage.prompt_tokens,
+            "output_tokens": raw_response.usage.completion_tokens,
+            "total_tokens": raw_response.usage.total_tokens
+        }
+
+    return {
+        "messages": [ai_message],
+        "tool_calls": response.tool_calls,
+        "iteration": state.iteration + 1,
+        "answer": response.answer,
+        "final_answer": response.final_answer,
+        "images": state.images
+    }

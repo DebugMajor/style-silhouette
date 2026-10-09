@@ -25,7 +25,7 @@ async function generateElevenLabsSpeech(text) {
         },
         body: JSON.stringify({
             text: cleanText,
-            model_id: 'eleven_monolingual_v1',
+            model_id: process.env.ELEVENLABS_MODEL_ID || 'eleven_flash_v2_5',
             voice_settings: {
                 stability: 0.5,
                 similarity_boost: 0.75

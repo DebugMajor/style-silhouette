@@ -1,10 +1,14 @@
 const fs = require('fs')
 const path = require('path')
 
-const TRIPO_BASE_URL = 'https://api.tripo3d.ai/v2/openapi'
+// Tripo V3 API base URL. V2 endpoints can reject a valid V3-capable key.
+const TRIPO_BASE_URL = 'https://openapi.tripo3d.ai/v3'
+const DEFAULT_MODEL = 'v3.1-20260211'
 
 function getApiKey() {
     let apiKey = process.env.TRIPO_API_KEY ? process.env.TRIPO_API_KEY.trim() : ''
+
+    // Tolerate a key accidentally wrapped in quotes or pasted with a Bearer prefix.
     if ((apiKey.startsWith('"') && apiKey.endsWith('"')) || (apiKey.startsWith("'") && apiKey.endsWith("'"))) {
         apiKey = apiKey.slice(1, -1).trim()
     }
@@ -12,149 +16,131 @@ function getApiKey() {
         apiKey = apiKey.slice(7).trim()
     }
     if (!apiKey) {
-        throw new Error('TRIPO_API_KEY is not configured in backend environment (.env)')
+        throw new Error('TRIPO_API_KEY is missing from backend/.env')
     }
     return apiKey
 }
 
-/**
- * Diagnostic endpoint calling GET /user/balance to verify Tripo API key
- */
-async function testAuthentication() {
+function getErrorMessage(json, status) {
+    const code = json?.code
+    const message = json?.message || json?.msg || `HTTP ${status}`
+    const suggestion = json?.suggestion ? ` ${json.suggestion}` : ''
+
+    if (Number(code) === 2010 || /insufficient credits/i.test(message)) {
+        return `Tripo account has insufficient credits. Add credits in the Tripo Console before generating a 3D model.${suggestion}`
+    }
+    if (status === 401 || Number(code) === 1000 || Number(code) === 1001) {
+        return `Tripo rejected TRIPO_API_KEY (HTTP ${status}, code ${code ?? 'unknown'}). The V3 balance check worked previously; verify this process is loading the same backend/.env key.${suggestion}`
+    }
+    return `Tripo API error (HTTP ${status}${code !== undefined ? `, code ${code}` : ''}): ${message}.${suggestion}`.trim()
+}
+
+async function tripoRequest(endpoint, options = {}) {
     const apiKey = getApiKey()
-    const response = await fetch(`${TRIPO_BASE_URL}/user/balance`, {
-        method: 'GET',
+    const response = await fetch(`${TRIPO_BASE_URL}${endpoint}`, {
+        ...options,
         headers: {
-            'Authorization': `Bearer ${apiKey}`
-        }
+            Authorization: `Bearer ${apiKey}`,
+            ...(options.headers || {}),
+        },
     })
 
     const json = await response.json().catch(() => ({}))
+    if (!response.ok || (json.code !== undefined && Number(json.code) !== 0)) {
+        const error = new Error(getErrorMessage(json, response.status))
+        error.status = response.status
+        error.tripoCode = json.code
+        error.suggestion = json.suggestion
+        throw error
+    }
+    return json.data ?? json
+}
 
-    if (!response.ok || (json.code !== undefined && json.code !== 0)) {
-        console.error('[TRIPO AUTH TEST FAILED] HTTP Status:', response.status, 'Tripo Code:', json.code, 'Message:', json.message || json.msg)
+/** Test the key against the V3 balance endpoint. A zero balance still means auth worked. */
+async function testAuthentication() {
+    try {
+        const data = await tripoRequest('/account/balance', { method: 'GET' })
+        return {
+            success: true,
+            authenticated: true,
+            balance: {
+                balance: Number(data.balance ?? 0),
+                frozen: Number(data.frozen ?? 0),
+            },
+            message: Number(data.balance ?? 0) <= 0
+                ? 'Tripo authentication succeeded, but the account has zero available credits.'
+                : 'Tripo authentication succeeded.',
+        }
+    } catch (err) {
         return {
             success: false,
             authenticated: false,
-            status: response.status,
-            message: json.message || json.msg || 'Tripo authentication failed'
+            status: err.status || 500,
+            message: err.message || 'Tripo authentication check failed.',
         }
-    }
-
-    return {
-        success: true,
-        authenticated: true,
-        balance: json.data || json
     }
 }
 
-/**
- * Upload image to Tripo API (POST /upload/sts)
- */
+/** Upload a local image using V3 POST /files and return its file_token. */
 async function uploadImageToTripo(filePath, originalName, mimeType) {
-    const apiKey = getApiKey()
-    const fileBuffer = fs.readFileSync(filePath)
-    const blob = new Blob([fileBuffer], { type: mimeType || 'image/jpeg' })
-    
-    const formData = new FormData()
-    formData.append('file', blob, originalName || 'upload.jpg')
+    if (!fs.existsSync(filePath)) {
+        throw new Error('The uploaded image could not be found on the server.')
+    }
 
-    const response = await fetch(`${TRIPO_BASE_URL}/upload/sts`, {
+    const fileBuffer = fs.readFileSync(filePath)
+    if (!fileBuffer.length) {
+        throw new Error('The uploaded image is empty.')
+    }
+
+    const blob = new Blob([fileBuffer], { type: mimeType || 'image/jpeg' })
+    const formData = new FormData()
+    formData.append('file', blob, originalName || path.basename(filePath) || 'upload.jpg')
+
+    const data = await tripoRequest('/files', {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`
-        },
-        body: formData
+        body: formData,
     })
 
-    const json = await response.json().catch(() => ({}))
-
-    if (!response.ok || (json.code !== undefined && json.code !== 0)) {
-        console.error('[TRIPO UPLOAD ERROR] HTTP Status:', response.status, 'Code:', json.code, 'Message:', json.message || json.msg)
-        throw new Error(json.message || json.msg || `Tripo image upload failed with status ${response.status}`)
-    }
-
-    const data = json.data || json
-    const fileToken = data.image_token || data.file_token || data.token
+    const fileToken = data.file_token || data.token
     if (!fileToken) {
-        throw new Error('Image token not returned from Tripo upload API')
+        throw new Error('Tripo V3 file upload did not return a file_token.')
     }
-
     return fileToken
 }
 
-/**
- * Create image-to-model task (POST /task)
- */
+/** Create a V3 image-to-model task from the uploaded file token. */
 async function createImageToModelTask(fileToken, fileType) {
-    const apiKey = getApiKey()
-    
-    let cleanType = (fileType || 'jpg').toLowerCase().replace('.', '')
-    if (cleanType === 'jpeg') cleanType = 'jpg'
+    if (!fileToken) throw new Error('A Tripo file token is required to generate a model.')
 
+    const model = (process.env.TRIPO_MODEL || DEFAULT_MODEL).trim()
     const payload = {
-        type: 'image_to_model',
-        model_version: 'P1-20260311',
-        file: {
-            type: cleanType,
-            file_token: fileToken
-        },
+        input: fileToken,
+        model,
         texture: true,
-        pbr: true
+        pbr: true,
+        texture_quality: 'detailed',
     }
 
-    const response = await fetch(`${TRIPO_BASE_URL}/task`, {
+    const data = await tripoRequest('/generation/image-to-model', {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
     })
 
-    const json = await response.json().catch(() => ({}))
-
-    if (!response.ok || (json.code !== undefined && json.code !== 0)) {
-        console.error('[TRIPO TASK CREATION ERROR] HTTP Status:', response.status, 'Code:', json.code, 'Message:', json.message || json.msg)
-        throw new Error(json.message || json.msg || `Tripo task creation failed with status ${response.status}`)
-    }
-
-    const data = json.data || json
     const taskId = data.task_id || data.id
-
     if (!taskId) {
-        throw new Error('Task ID not returned from Tripo task API')
+        throw new Error('Tripo V3 did not return a task_id.')
     }
-
     return taskId
 }
 
-/**
- * Get task status (GET /task/:taskId)
- */
+/** Query an asynchronous V3 task. */
 async function getTaskStatus(taskId) {
-    const apiKey = getApiKey()
-
-    const response = await fetch(`${TRIPO_BASE_URL}/task/${taskId}`, {
-        method: 'GET',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`
-        }
-    })
-
-    const json = await response.json().catch(() => ({}))
-
-    if (!response.ok) {
-        console.error('[TRIPO STATUS CHECK ERROR] HTTP Status:', response.status, 'Message:', json.message || json.msg)
-        throw new Error(json.message || `Tripo status check failed with HTTP ${response.status}`)
-    }
-
-    return json.data || json
+    if (!taskId) throw new Error('A Tripo task ID is required.')
+    return tripoRequest(`/tasks/${encodeURIComponent(taskId)}`, { method: 'GET' })
 }
 
-/**
- * Download GLB model from Tripo temporary URL and store locally on backend server
- */
+/** Download a completed GLB model to backend/uploads/models. */
 async function downloadAndSaveModel(modelUrl, taskId) {
     if (!modelUrl) return null
 
@@ -163,22 +149,21 @@ async function downloadAndSaveModel(modelUrl, taskId) {
         fs.mkdirSync(modelsDir, { recursive: true })
     }
 
-    const targetPath = path.join(modelsDir, `${taskId}.glb`)
-    
+    const safeTaskId = String(taskId || Date.now()).replace(/[^a-zA-Z0-9_-]/g, '_')
+    const targetPath = path.join(modelsDir, `${safeTaskId}.glb`)
+
     if (fs.existsSync(targetPath)) {
-        return `/uploads/models/${taskId}.glb`
+        return `/uploads/models/${safeTaskId}.glb`
     }
 
     const response = await fetch(modelUrl)
     if (!response.ok) {
-        throw new Error(`Failed to download GLB model from Tripo URL: HTTP ${response.status}`)
+        throw new Error(`Failed to download GLB model from Tripo: HTTP ${response.status}`)
     }
 
-    const arrayBuffer = await response.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    const buffer = Buffer.from(await response.arrayBuffer())
     fs.writeFileSync(targetPath, buffer)
-
-    return `/uploads/models/${taskId}.glb`
+    return `/uploads/models/${safeTaskId}.glb`
 }
 
 module.exports = {
@@ -186,5 +171,5 @@ module.exports = {
     uploadImageToTripo,
     createImageToModelTask,
     getTaskStatus,
-    downloadAndSaveModel
+    downloadAndSaveModel,
 }

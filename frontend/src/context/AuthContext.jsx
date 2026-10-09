@@ -37,20 +37,39 @@ export function AuthProvider({ children }) {
             const stored = localStorage.getItem('sas_user')
             if (stored) {
                 const parsed = JSON.parse(stored)
-                setUser(parsed)
-                axios.defaults.headers.common['Authorization'] = `Bearer ${parsed.token}`
+                const token = typeof parsed?.token === 'string' ? parsed.token.trim() : ''
+
+                if (token && token !== 'undefined' && token !== 'null') {
+                    setUser(parsed)
+                    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+                } else {
+                    // Remove stale/malformed sessions instead of sending "Bearer undefined".
+                    localStorage.removeItem('sas_user')
+                    delete axios.defaults.headers.common['Authorization']
+                    setUser(null)
+                }
+            } else {
+                delete axios.defaults.headers.common['Authorization']
             }
         } catch {
             localStorage.removeItem('sas_user')
+            delete axios.defaults.headers.common['Authorization']
+            setUser(null)
         }
         setLoading(false)
     }, [])
 
     // ── Persist user + set auth header ───────────────────
     const persist = (data) => {
-        localStorage.setItem('sas_user', JSON.stringify(data))
-        axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
-        setUser(data)
+        const token = typeof data?.token === 'string' ? data.token.trim() : ''
+        if (!token || token === 'undefined' || token === 'null') {
+            throw new Error('The server did not return a valid session token. Please sign in again.')
+        }
+
+        const session = { ...data, token }
+        localStorage.setItem('sas_user', JSON.stringify(session))
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        setUser(session)
     }
 
     // ── Auth actions ──────────────────────────────────────

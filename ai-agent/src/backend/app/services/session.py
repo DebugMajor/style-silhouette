@@ -52,6 +52,18 @@ class SessionManager:
         self._sessions[session_id].message_history.append(user_message)
         self._sessions[session_id].message_history.append(ai_message)
 
+    def list_sessions(self) -> list[dict[str, str]]:
+        """Return concise session summaries for the frontend."""
+        summaries = []
+        for session_id, session in reversed(list(self._sessions.items())):
+            first_user_message = next(
+                (message.content for message in session.message_history if message.role == "user"),
+                "New conversation",
+            )
+            title = " ".join(first_user_message.split())[:64] or "New conversation"
+            summaries.append({"id": session_id, "title": title})
+        return summaries
+
     def cleanup_session(self, session_id: str):
         del self._sessions[session_id]
 

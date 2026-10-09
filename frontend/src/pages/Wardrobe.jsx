@@ -4,53 +4,69 @@ import { Shirt, ArrowRight, Plus } from 'lucide-react'
 
 const WARDROBE_ITEMS = [
     {
-        id: 'w-1',
-        name: 'Haute Couture Wool Trench Coat',
-        category: 'Outerwear',
-        tags: ['Statement', 'Winter', 'Tailored'],
-        imageSrc: 'https://images.unsplash.com/photo-1548883354-7622d03aca27?q=80&w=800&auto=format&fit=crop',
-    },
-    {
-        id: 'w-2',
-        name: 'Structured Silk Evening Blazer',
-        category: 'Outerwear',
-        tags: ['Minimalist', 'Formal', 'Silk'],
-        imageSrc: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?q=80&w=800&auto=format&fit=crop',
-    },
-    {
-        id: 'w-3',
-        name: 'Draped Linen Editorial Top',
+        id: 'catalog-tee-ivory',
+        name: 'Essential Ivory Crew-Neck T-Shirt',
         category: 'Tops',
-        tags: ['Contemporary', 'Couture'],
-        imageSrc: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=800&auto=format&fit=crop',
+        tryOnCategory: 'upper_body',
+        tags: ['Casual', 'Neutral', 'Everyday'],
+        imageSrc: '/wardrobe/catalog/ivory-tee.png',
     },
     {
-        id: 'w-4',
-        name: 'High-Waist Tailored Trousers',
+        id: 'catalog-jeans-indigo',
+        name: 'Indigo Straight-Leg Jeans',
+        category: 'Bottoms',
+        tryOnCategory: 'lower_body',
+        tags: ['Denim', 'Casual', 'Everyday'],
+        imageSrc: '/wardrobe/catalog/indigo-jeans.png',
+    },
+    {
+        id: 'catalog-chinos-sand',
+        name: 'Sand Slim-Fit Chinos',
+        category: 'Bottoms',
+        tryOnCategory: 'lower_body',
+        tags: ['Smart Casual', 'Neutral', 'Tailored'],
+        imageSrc: '/wardrobe/catalog/sand-chinos.png',
+    },
+    {
+        id: 'catalog-oxford-blue',
+        name: 'Light Blue Oxford Shirt',
         category: 'Tops',
-        tags: ['Workwear', 'Monochrome'],
-        imageSrc: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=800&auto=format&fit=crop',
+        tryOnCategory: 'upper_body',
+        tags: ['Smart Casual', 'Office', 'Classic'],
+        imageSrc: '/wardrobe/catalog/oxford-shirt.png',
     },
     {
-        id: 'w-5',
-        name: 'Architectural Runway Dress',
+        id: 'catalog-bomber-olive',
+        name: 'Olive Casual Bomber Jacket',
         category: 'Outerwear',
-        tags: ['Runway', 'Luxury'],
-        imageSrc: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=800&auto=format&fit=crop',
+        tryOnCategory: 'upper_body',
+        tags: ['Layering', 'Casual', 'Earth Tones'],
+        imageSrc: '/wardrobe/catalog/olive-bomber.png',
     },
     {
-        id: 'w-6',
-        name: 'Minimalist Studio Vest',
+        id: 'catalog-polo-navy',
+        name: 'Navy Pique Polo Shirt',
         category: 'Tops',
-        tags: ['Studio', 'Edgy'],
-        imageSrc: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?q=80&w=800&auto=format&fit=crop',
+        tryOnCategory: 'upper_body',
+        tags: ['Smart Casual', 'Navy', 'Everyday'],
+        imageSrc: '/wardrobe/catalog/navy-polo.png',
     },
 ]
 
-const CATEGORIES = ['All', 'Tops', 'Bottoms', 'Dresses', 'Shoes', 'Accessories']
+const CATEGORIES = ['All', 'Tops', 'Bottoms', 'Outerwear']
+
+function wardrobeTryOnSlot(item) {
+    const description = `${item?.name || ''} ${item?.category || ''}`.toLowerCase()
+    if (/\b(dress|gown|jumpsuit|romper)\b/.test(description)) return 'dresses'
+    if (/\b(jeans?|trousers?|pants?|shorts?|skirt|leggings?|bottoms?|chinos?)\b/.test(description) || /\bbottoms\b/i.test(item?.category || '')) return 'lower_body'
+    if (/\b(shoes?|sneakers?|boots?|sandals?)\b/.test(description)) return 'lower_body'
+    return 'upper_body'
+}
+
 
 export default function Wardrobe() {
     const [selectedCat, setSelectedCat] = useState('All')
+    const [selectedItems, setSelectedItems] = useState([])
     const navigate = useNavigate()
 
     const filtered = selectedCat === 'All'
@@ -58,8 +74,19 @@ export default function Wardrobe() {
         : WARDROBE_ITEMS.filter((i) => i.category === selectedCat)
 
     const handleTryOn = (item) => {
-        const itemParam = encodeURIComponent(JSON.stringify(item))
-        navigate(`/dashboard/virtual-try-on?item=${itemParam}`)
+        setSelectedItems(prev => {
+            const alreadySelected = prev.some(selected => selected.id === item.id)
+            if (alreadySelected) return prev.filter(selected => selected.id !== item.id)
+
+            const slot = wardrobeTryOnSlot(item)
+            // A dress covers both regions, so it is selected on its own.
+            if (slot === 'dresses') return [item]
+            // Selecting an upper/lower item replaces only the prior item in that same slot.
+            return [...prev.filter(selected => {
+                const selectedSlot = wardrobeTryOnSlot(selected)
+                return selectedSlot !== 'dresses' && selectedSlot !== slot
+            }), item]
+        })
     }
 
     return (
@@ -74,6 +101,16 @@ export default function Wardrobe() {
                         Manage your digital closet and catalog pieces for virtual try-on fitting.
                     </p>
                 </div>
+
+                {selectedItems.length > 0 && (
+                    <button
+                        className="btn btn-primary"
+                        onClick={() => navigate('/dashboard/virtual-try-on', { state: { wardrobeItems: selectedItems } })}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                    >
+                        <ArrowRight size={15} /> Try On Selected ({selectedItems.length})
+                    </button>
+                )}
 
                 <button
                     style={{
@@ -111,7 +148,9 @@ export default function Wardrobe() {
 
             {/* Items Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px' }}>
-                {filtered.map((item) => (
+                {filtered.map((item) => {
+                    const isSelected = selectedItems.some(selected => selected.id === item.id)
+                    return (
                     <div
                         key={item.id}
                         className="card card-hover"
@@ -138,15 +177,16 @@ export default function Wardrobe() {
                         </div>
 
                         <button
-                            className="btn btn-secondary btn-sm"
+                            className={`btn btn-sm ${isSelected ? 'btn-primary' : 'btn-secondary'}`}
                             style={{ marginTop: 'auto', width: '100%' }}
                             onClick={() => handleTryOn(item)}
                         >
-                            <span>Try On Look</span>
+                            <span>{isSelected ? 'Selected ✓' : 'Select for Try-On'}</span>
                             <ArrowRight size={13} />
                         </button>
                     </div>
-                ))}
+                    )
+                })}
             </div>
         </div>
     )

@@ -19,7 +19,7 @@ async function analyzeStyle(req, res) {
         const filePath = req.file.path
         const mimeType = req.file.mimetype || 'image/jpeg'
 
-        const analysis = await styleVisionService.analyzeOutfitImage(filePath, mimeType)
+        const analysis = await styleVisionService.analyzeOutfitImage(filePath, mimeType, req.body?.occasion || 'Casual')
 
         // Asynchronously clean up uploaded temporary file
         fs.unlink(filePath, () => {})
@@ -30,7 +30,7 @@ async function analyzeStyle(req, res) {
         })
     } catch (err) {
         console.error('[styleSpeakerController] analyzeStyle Error:', err)
-        return res.status(500).json({
+        return res.status(err.statusCode || 500).json({
             success: false,
             message: err.message || 'Style analysis failed. Please try again.'
         })

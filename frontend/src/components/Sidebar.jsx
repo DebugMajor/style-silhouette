@@ -6,7 +6,6 @@ import {
     TrendingUp,
     MessageCircle,
     Shirt,
-    Box,
     Grid,
     Camera,
     Upload,
@@ -40,7 +39,6 @@ export default function Sidebar() {
             title: 'TRY-ON',
             items: [
                 { icon: Shirt, label: 'Virtual Try-On', to: '/dashboard/virtual-try-on' },
-                { icon: Box, label: '3D Studio', to: '/dashboard/virtual-try-on?mode=3d' },
             ]
         },
         {

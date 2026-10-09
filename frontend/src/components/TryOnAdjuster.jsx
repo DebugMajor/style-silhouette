@@ -1,663 +1,354 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-    Move,
-    Maximize2,
-    RotateCw,
-    RefreshCw,
-    Check,
-    X,
-    Sliders,
-    ZoomIn,
-    ZoomOut,
-    Eye,
-    Scissors,
-    Lock,
-    Unlock,
-    ArrowUp,
-    ArrowDown,
-    ArrowLeft,
-    ArrowRight,
-    Sparkles
+    Move, Maximize2, RotateCw, RefreshCw, Check, X, Scissors,
+    ArrowUp, ArrowDown, ArrowLeft, ArrowRight
 } from 'lucide-react'
+
+const DEFAULT_TRANSFORM = Object.freeze({
+    posX: 0, posY: 0, scale: 1, scaleW: 1, scaleH: 1, rotation: 0, opacity: 1,
+})
+const ORDER = { lower_body: 0, upper_body: 1, dresses: 2 }
+const LABELS = { upper_body: 'Upper', lower_body: 'Lower', dresses: 'Dress' }
+
+function normalizedGarments(garments, clothingPhoto, category) {
+    if (Array.isArray(garments) && garments.length) {
+        const byCategory = new Map()
+        garments.filter(g => g?.image).forEach(g => byCategory.set(g.category || category, g))
+        return [...byCategory.values()].sort((a, b) => (ORDER[a.category] ?? 1) - (ORDER[b.category] ?? 1))
+    }
+    return clothingPhoto ? [{ image: clothingPhoto, category: category || 'upper_body', name: 'Garment' }] : []
+}
+
+function loadImage(src) {
+    return new Promise((resolve, reject) => {
+        const image = new Image()
+        image.crossOrigin = 'anonymous'
+        image.onload = () => resolve(image)
+        image.onerror = () => reject(new Error('An image could not be loaded. Try re-uploading it.'))
+        image.src = src
+    })
+}
+
+// Remove only edge-connected pixels close to the image's corner background colour.
+// This avoids keying out enclosed white garment fabric.
+function createGarmentSource(image, removeBackground) {
+    const width = image.naturalWidth || image.width
+    const height = image.naturalHeight || image.height
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    ctx.drawImage(image, 0, 0, width, height)
+    if (!removeBackground) return canvas
+
+    try {
+        const pixelsImage = ctx.getImageData(0, 0, width, height)
+        const pixels = pixelsImage.data
+        let alreadyTransparent = false
+        for (let i = 3; i < pixels.length; i += 4) {
+            if (pixels[i] < 250) { alreadyTransparent = true; break }
+        }
+        if (alreadyTransparent) return canvas
+
+        const patch = Math.max(2, Math.min(12, Math.floor(Math.min(width, height) * 0.025)))
+        const corners = [[0, 0], [width - patch, 0], [0, height - patch], [width - patch, height - patch]]
+        let r = 0, g = 0, b = 0, n = 0
+        for (const [sx, sy] of corners) {
+            for (let yy = sy; yy < sy + patch; yy++) {
+                for (let xx = sx; xx < sx + patch; xx++) {
+                    const i = (yy * width + xx) * 4
+                    r += pixels[i]; g += pixels[i + 1]; b += pixels[i + 2]; n++
+                }
+            }
+        }
+        r /= n; g /= n; b /= n
+        const cornerBrightness = (r + g + b) / 3
+        const colourSpread = Math.max(r, g, b) - Math.min(r, g, b)
+        if (colourSpread > 92) return canvas
+
+        const tolerance = cornerBrightness > 185 ? 48 : cornerBrightness < 70 ? 43 : 34
+        const toleranceSq = tolerance * tolerance * 3
+        const total = width * height
+        const visited = new Uint8Array(total)
+        const queue = new Int32Array(total)
+        let head = 0, tail = 0
+        const add = (x, y) => {
+            if (x < 0 || y < 0 || x >= width || y >= height) return
+            const p = y * width + x
+            if (visited[p]) return
+            const i = p * 4
+            const dr = pixels[i] - r, dg = pixels[i + 1] - g, db = pixels[i + 2] - b
+            if (dr * dr + dg * dg + db * db > toleranceSq) return
+            visited[p] = 1
+            queue[tail++] = p
+        }
+        for (let x = 0; x < width; x++) { add(x, 0); add(x, height - 1) }
+        for (let y = 1; y < height - 1; y++) { add(0, y); add(width - 1, y) }
+        while (head < tail) {
+            const p = queue[head++]
+            pixels[p * 4 + 3] = 0
+            const x = p % width, y = (p / width) | 0
+            if (x > 0) add(x - 1, y)
+            if (x + 1 < width) add(x + 1, y)
+            if (y > 0) add(x, y - 1)
+            if (y + 1 < height) add(x, y + 1)
+        }
+        ctx.putImageData(pixelsImage, 0, 0)
+    } catch (error) {
+        // If the image is remote and canvas access is blocked by CORS, use the original image.
+        console.warn('[TryOnAdjuster] Background removal skipped:', error?.message || error)
+    }
+    return canvas
+}
+
+function categoryBox(category, width, height) {
+    if (category === 'lower_body') return { x: width * 0.245, y: height * 0.455, w: width * 0.51, h: height * 0.49 }
+    if (category === 'dresses') return { x: width * 0.205, y: height * 0.205, w: width * 0.59, h: height * 0.735 }
+    return { x: width * 0.19, y: height * 0.215, w: width * 0.62, h: height * 0.30 }
+}
 
 export default function TryOnAdjuster({
     modelPhoto,
     clothingPhoto,
     category = 'upper_body',
+    garments = [],
+    initialTransforms = {},
     onApply,
-    onClose
+    onClose,
 }) {
     const canvasRef = useRef(null)
-
-    // ── Adjustment States ──
-    const [posX, setPosX] = useState(0)
-    const [posY, setPosY] = useState(0)
-    const [scale, setScale] = useState(1.0)
-    const [scaleW, setScaleW] = useState(1.0)
-    const [scaleH, setScaleH] = useState(1.0)
-    const [lockAspect, setLockAspect] = useState(true)
-    const [rotation, setRotation] = useState(0)
-    const [opacity, setOpacity] = useState(1.0)
-    const [removeWhiteBg, setRemoveWhiteBg] = useState(true)
-    const [bgThreshold, setBgThreshold] = useState(235)
-
-    // Interaction state
-    const [isDragging, setIsDragging] = useState(false)
-    const dragStartRef = useRef({ x: 0, y: 0, initialPosX: 0, initialPosY: 0 })
-
-    // Loaded image elements ref
-    const modelImgRef = useRef(null)
-    const clothingImgRef = useRef(null)
-    const processedGarmentCanvasRef = useRef(null)
+    const modelImageRef = useRef(null)
+    const rawGarmentImagesRef = useRef({})
+    const garmentSourcesRef = useRef({})
+    const draggingRef = useRef(false)
+    const dragStartRef = useRef({ x: 0, y: 0, posX: 0, posY: 0 })
+    const [activeCategory, setActiveCategory] = useState(category || 'upper_body')
+    const [transforms, setTransforms] = useState({})
+    const [removeBackground, setRemoveBackground] = useState(true)
     const [imagesLoaded, setImagesLoaded] = useState(false)
+    const [loadError, setLoadError] = useState('')
+    const [dragging, setDragging] = useState(false)
+    const [cutoutVersion, setCutoutVersion] = useState(0)
 
-    // ── Helper: Process Garment Background Keying ──
-    const getProcessedGarmentCanvas = useCallback((garmentImg, shouldRemoveBg, threshold) => {
-        const offCanvas = document.createElement('canvas')
-        offCanvas.width = garmentImg.width || 500
-        offCanvas.height = garmentImg.height || 500
-        const ctx = offCanvas.getContext('2d')
-        ctx.drawImage(garmentImg, 0, 0)
+    const garmentList = normalizedGarments(garments, clothingPhoto, category)
+    const garmentKey = garmentList.map(g => `${g.category}:${g.name || ''}:${String(g.image).length}:${String(g.image).slice(-28)}`).join('|')
+    const activeGarment = garmentList.find(g => g.category === activeCategory) || garmentList[0]
+    const activeKey = activeGarment?.category || activeCategory
+    const current = { ...DEFAULT_TRANSFORM, ...(transforms[activeKey] || {}) }
 
-        if (!shouldRemoveBg) {
-            return offCanvas
-        }
-
-        const imgData = ctx.getImageData(0, 0, offCanvas.width, offCanvas.height)
-        const data = imgData.data
-
-        for (let i = 0; i < data.length; i += 4) {
-            const r = data[i]
-            const g = data[i + 1]
-            const b = data[i + 2]
-            
-            // Check if pixel is near white/light gray
-            if (r >= threshold && g >= threshold && b >= threshold) {
-                data[i + 3] = 0 // transparent
-            } else if (r >= threshold - 20 && g >= threshold - 20 && b >= threshold - 20) {
-                // Smooth feather edge
-                const avg = (r + g + b) / 3
-                const alphaFactor = Math.max(0, (255 - avg) / (255 - (threshold - 20)))
-                data[i + 3] = Math.floor(data[i + 3] * alphaFactor)
-            }
-        }
-
-        ctx.putImageData(imgData, 0, 0)
-        return offCanvas
-    }, [])
-
-    // ── Load Images into Refs ──
     useEffect(() => {
-        let isMounted = true
+        setActiveCategory(category || garmentList[0]?.category || 'upper_body')
+    }, [category, garmentKey])
+
+    useEffect(() => {
+        setTransforms(prev => ({ ...prev, ...(initialTransforms || {}) }))
+    }, [initialTransforms])
+
+    useEffect(() => {
+        let cancelled = false
         setImagesLoaded(false)
+        setLoadError('')
+        const modelPromise = loadImage(modelPhoto)
+        const garmentPromises = garmentList.map(async garment => ({
+            category: garment.category,
+            image: await loadImage(garment.image),
+        }))
+        Promise.all([modelPromise, ...garmentPromises]).then(([model, ...loadedGarments]) => {
+            if (cancelled) return
+            modelImageRef.current = model
+            rawGarmentImagesRef.current = Object.fromEntries(loadedGarments.map(g => [g.category, g.image]))
+            setImagesLoaded(true)
+        }).catch(error => {
+            if (!cancelled) setLoadError(error.message || 'Unable to load images for adjustment.')
+        })
+        return () => { cancelled = true }
+    // `garmentKey` tracks image/name/category changes without reloading on each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [modelPhoto, garmentKey])
 
-        const mImg = new Image()
-        mImg.crossOrigin = 'anonymous'
-
-        const cImg = new Image()
-        cImg.crossOrigin = 'anonymous'
-
-        let loadedCount = 0
-        const checkDone = () => {
-            loadedCount++
-            if (loadedCount === 2 && isMounted) {
-                modelImgRef.current = mImg
-                clothingImgRef.current = cImg
-                setImagesLoaded(true)
-            }
-        }
-
-        mImg.onload = checkDone
-        mImg.onerror = checkDone
-        cImg.onload = checkDone
-        cImg.onerror = checkDone
-
-        mImg.src = modelPhoto
-        cImg.src = clothingPhoto
-
-        return () => {
-            isMounted = false
-        }
-    }, [modelPhoto, clothingPhoto])
-
-    // Update background keying cache canvas when garment image or threshold changes
     useEffect(() => {
-        if (imagesLoaded && clothingImgRef.current) {
-            processedGarmentCanvasRef.current = getProcessedGarmentCanvas(
-                clothingImgRef.current,
-                removeWhiteBg,
-                bgThreshold
-            )
+        if (!imagesLoaded) return
+        const next = {}
+        for (const garment of garmentList) {
+            const image = rawGarmentImagesRef.current[garment.category]
+            if (image) next[garment.category] = createGarmentSource(image, removeBackground)
         }
-    }, [imagesLoaded, clothingPhoto, removeWhiteBg, bgThreshold, getProcessedGarmentCanvas])
+        garmentSourcesRef.current = next
+        setCutoutVersion(v => v + 1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [imagesLoaded, removeBackground, garmentKey])
 
-    // ── Category Base Positioning Defaults ──
-    const getBaseGarmentRect = useCallback((canvasWidth, canvasHeight) => {
-        let targetX = canvasWidth * 0.2
-        let targetY = canvasHeight * 0.24
-        let targetW = canvasWidth * 0.6
-        let targetH = canvasHeight * 0.45
+    const updateActive = useCallback((patch) => {
+        setTransforms(prev => ({
+            ...prev,
+            [activeKey]: { ...DEFAULT_TRANSFORM, ...(prev[activeKey] || {}), ...patch },
+        }))
+    }, [activeKey])
 
-        if (category === 'lower_body') {
-            targetY = canvasHeight * 0.52
-            targetH = canvasHeight * 0.42
-            targetW = canvasWidth * 0.5
-            targetX = canvasWidth * 0.25
-        } else if (category === 'dresses') {
-            targetY = canvasHeight * 0.22
-            targetH = canvasHeight * 0.7
-            targetW = canvasWidth * 0.65
-            targetX = canvasWidth * 0.175
-        }
-
-        return { targetX, targetY, targetW, targetH }
-    }, [category])
-
-    // ── Render Main Canvas ──
-    const renderCanvas = useCallback(() => {
+    const drawCanvas = useCallback((showSelection = true) => {
         const canvas = canvasRef.current
-        if (!canvas || !imagesLoaded || !modelImgRef.current) return
-
+        const model = modelImageRef.current
+        if (!canvas || !model || !imagesLoaded) return
         const ctx = canvas.getContext('2d')
-        const width = canvas.width
-        const height = canvas.height
+        if (!ctx) return
+        const W = canvas.width, H = canvas.height
+        ctx.clearRect(0, 0, W, H)
+        ctx.fillStyle = '#111113'
+        ctx.fillRect(0, 0, W, H)
 
-        // Clear canvas
-        ctx.fillStyle = '#121214'
-        ctx.fillRect(0, 0, width, height)
+        const mW = model.naturalWidth || model.width
+        const mH = model.naturalHeight || model.height
+        const fit = Math.min(W / mW, H / mH)
+        const displayW = mW * fit, displayH = mH * fit
+        ctx.drawImage(model, (W - displayW) / 2, (H - displayH) / 2, displayW, displayH)
 
-        // Draw model background image
-        const humanImg = modelImgRef.current
-        if (humanImg && humanImg.naturalWidth) {
-            const hRatio = width / humanImg.naturalWidth
-            const vRatio = height / humanImg.naturalHeight
-            const ratio = Math.min(hRatio, vRatio)
-            const shiftX = (width - humanImg.naturalWidth * ratio) / 2
-            const shiftY = (height - humanImg.naturalHeight * ratio) / 2
-
-            ctx.drawImage(
-                humanImg,
-                0, 0, humanImg.naturalWidth, humanImg.naturalHeight,
-                shiftX, shiftY, humanImg.naturalWidth * ratio, humanImg.naturalHeight * ratio
-            )
-        }
-
-        // Draw garment image with transforms
-        const garmentSource = processedGarmentCanvasRef.current || clothingImgRef.current
-        if (garmentSource) {
-            const baseRect = getBaseGarmentRect(width, height)
-            
-            // Calculate center point of garment base box
-            const baseCenterX = baseRect.targetX + baseRect.targetW / 2
-            const baseCenterY = baseRect.targetY + baseRect.targetH / 2
-
-            // Apply transforms
-            const finalWidth = baseRect.targetW * scale * scaleW
-            const finalHeight = baseRect.targetH * scale * scaleH
-            const finalCenterX = baseCenterX + posX
-            const finalCenterY = baseCenterY + posY
+        const hasDress = garmentList.some(g => g.category === 'dresses')
+        const drawable = hasDress ? garmentList.filter(g => g.category === 'dresses') : [...garmentList].sort((a, b) => (ORDER[a.category] ?? 1) - (ORDER[b.category] ?? 1))
+        for (const garment of drawable) {
+            const source = garmentSourcesRef.current[garment.category]
+            if (!source) continue
+            const box = categoryBox(garment.category, W, H)
+            const sourceW = source.width || 1, sourceH = source.height || 1
+            const ratio = Math.min(box.w / sourceW, box.h / sourceH)
+            const baseW = sourceW * ratio
+            const baseH = sourceH * ratio
+            const t = { ...DEFAULT_TRANSFORM, ...(transforms[garment.category] || {}) }
+            const finalW = baseW * t.scale * t.scaleW
+            const finalH = baseH * t.scale * t.scaleH
+            const centerX = box.x + box.w / 2 + t.posX
+            const centerY = box.y + box.h / 2 + t.posY
 
             ctx.save()
-            ctx.globalAlpha = opacity
-
-            // Position at center of transformed box for clean rotation
-            ctx.translate(finalCenterX, finalCenterY)
-            ctx.rotate((rotation * Math.PI) / 180)
-
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.45)'
-            ctx.shadowBlur = 16
-            ctx.shadowOffsetY = 6
-
-            ctx.drawImage(
-                garmentSource,
-                -finalWidth / 2,
-                -finalHeight / 2,
-                finalWidth,
-                finalHeight
-            )
-
-            // If dragging, draw bounding box indicator
-            if (isDragging) {
-                ctx.strokeStyle = '#4ADE80'
-                ctx.lineWidth = 2
-                ctx.setLineDash([6, 4])
-                ctx.strokeRect(
-                    -finalWidth / 2,
-                    -finalHeight / 2,
-                    finalWidth,
-                    finalHeight
-                )
+            ctx.globalAlpha = Math.max(0, Math.min(1, t.opacity))
+            ctx.translate(centerX, centerY)
+            ctx.rotate((t.rotation * Math.PI) / 180)
+            ctx.shadowColor = 'rgba(0,0,0,.25)'
+            ctx.shadowBlur = 7
+            ctx.drawImage(source, -finalW / 2, -finalH / 2, finalW, finalH)
+            ctx.shadowBlur = 0
+            if (showSelection && garment.category === activeKey) {
+                ctx.strokeStyle = dragging ? '#4ADE80' : '#BA7180'
+                ctx.lineWidth = 3
+                ctx.setLineDash([8, 5])
+                ctx.strokeRect(-finalW / 2, -finalH / 2, finalW, finalH)
             }
-
             ctx.restore()
         }
-    }, [imagesLoaded, getBaseGarmentRect, posX, posY, scale, scaleW, scaleH, rotation, opacity, isDragging])
+    }, [imagesLoaded, garmentKey, transforms, activeKey, dragging, cutoutVersion])
 
-    useEffect(() => {
-        renderCanvas()
-    }, [renderCanvas])
+    useEffect(() => { drawCanvas(true) }, [drawCanvas])
 
-    // ── Mouse / Touch Drag Handlers ──
     const handlePointerDown = (e) => {
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY
-
-        setIsDragging(true)
-        dragStartRef.current = {
-            x: clientX,
-            y: clientY,
-            initialPosX: posX,
-            initialPosY: posY
-        }
+        if (e.button !== undefined && e.button !== 0) return
+        e.preventDefault()
+        e.currentTarget.setPointerCapture?.(e.pointerId)
+        draggingRef.current = true
+        setDragging(true)
+        dragStartRef.current = { x: e.clientX, y: e.clientY, posX: current.posX, posY: current.posY }
     }
 
     const handlePointerMove = (e) => {
-        if (!isDragging) return
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY
-
+        if (!draggingRef.current) return
         const canvas = canvasRef.current
         if (!canvas) return
         const rect = canvas.getBoundingClientRect()
-        const scaleFactorX = canvas.width / rect.width
-        const scaleFactorY = canvas.height / rect.height
-
-        const deltaX = (clientX - dragStartRef.current.x) * scaleFactorX
-        const deltaY = (clientY - dragStartRef.current.y) * scaleFactorY
-
-        setPosX(Math.round(dragStartRef.current.initialPosX + deltaX))
-        setPosY(Math.round(dragStartRef.current.initialPosY + deltaY))
+        if (!rect.width || !rect.height) return
+        updateActive({
+            posX: Math.round(dragStartRef.current.posX + (e.clientX - dragStartRef.current.x) * canvas.width / rect.width),
+            posY: Math.round(dragStartRef.current.posY + (e.clientY - dragStartRef.current.y) * canvas.height / rect.height),
+        })
     }
 
-    const handlePointerUp = () => {
-        setIsDragging(false)
+    const handlePointerUp = (e) => {
+        draggingRef.current = false
+        setDragging(false)
+        if (e?.currentTarget?.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
     }
 
-    // ── Reset Controls ──
-    const handleReset = () => {
-        setPosX(0)
-        setPosY(0)
-        setScale(1.0)
-        setScaleW(1.0)
-        setScaleH(1.0)
-        setRotation(0)
-        setOpacity(1.0)
-        setRemoveWhiteBg(true)
-        setBgThreshold(235)
+    const resetActive = () => updateActive({ ...DEFAULT_TRANSFORM })
+    const preset = () => {
+        if (activeKey === 'lower_body') updateActive({ posX: 0, posY: 30, scale: 1, scaleW: 1, scaleH: 1, rotation: 0, opacity: 1 })
+        else if (activeKey === 'dresses') updateActive({ posX: 0, posY: 0, scale: 1, scaleW: 1, scaleH: 1, rotation: 0, opacity: 1 })
+        else updateActive({ posX: 0, posY: -12, scale: 1, scaleW: 1, scaleH: 1, rotation: 0, opacity: 1 })
     }
 
-    // ── Preset Alignments ──
-    const applyPreset = (presetType) => {
-        if (presetType === 'upper') {
-            setPosY(-40)
-            setScale(1.05)
-        } else if (presetType === 'lower') {
-            setPosY(60)
-            setScale(1.0)
-        } else if (presetType === 'dress') {
-            setPosY(0)
-            setScale(1.1)
-        } else if (presetType === 'center') {
-            setPosX(0)
-            setPosY(0)
-            setScale(1.0)
-        }
-    }
-
-    // ── Apply & Export Canvas Result ──
-    const handleApplyResult = () => {
+    const handleApply = () => {
         const canvas = canvasRef.current
-        if (!canvas) return
-        
-        // Final render clean without drag lines
-        renderCanvas()
+        if (!canvas || !imagesLoaded) return
+        drawCanvas(false)
         const dataUrl = canvas.toDataURL('image/png')
-        if (onApply) {
-            onApply(dataUrl)
-        }
+        onApply?.(dataUrl, transforms)
     }
 
     return (
-        <div style={{
-            background: 'var(--bg-card, #18181b)',
-            border: '1px solid var(--accent, #6366f1)',
-            borderRadius: 'var(--radius-lg, 12px)',
-            padding: '24px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '20px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
-        }}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{
-                        background: 'rgba(99, 102, 241, 0.15)',
-                        color: 'var(--accent, #6366f1)',
-                        padding: '8px',
-                        borderRadius: '8px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                    }}>
-                        <Move size={18} />
-                    </div>
-                    <div>
-                        <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                            Custom Garment Positioning & Resizing
-                        </h3>
-                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
-                            Drag on canvas or use sliders to scale, position, and fit garment perfectly on model.
-                        </p>
-                    </div>
+        <section style={{ background: 'var(--bg-card, #18181b)', border: '1px solid var(--accent-border, #9b5866)', borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                    <h3 style={{ margin: 0, fontSize: 17 }}>Adjust Garment Fit</h3>
+                    <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 12 }}>Select Upper or Lower, then drag or fine-tune that garment. Other selected garments remain in the preview.</p>
                 </div>
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={handleReset} className="btn btn-secondary btn-sm" title="Reset to default fit">
-                        <RefreshCw size={13} />
-                        <span>Reset Fit</span>
-                    </button>
-                    {onClose && (
-                        <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ padding: '6px' }}>
-                            <X size={16} />
-                        </button>
-                    )}
+                <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="btn btn-secondary btn-sm" onClick={resetActive}><RefreshCw size={13} /> Reset {LABELS[activeKey] || 'Garment'}</button>
+                    {onClose && <button className="btn btn-secondary btn-sm" onClick={onClose} aria-label="Close fit editor"><X size={14} /></button>}
                 </div>
             </div>
 
-            {/* Main Editor Body: Canvas Viewport (Left) + Sliders & Controls (Right) */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', alignItems: 'start' }}>
-                
-                {/* CANVAS VIEWPORT */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                    <div
-                        style={{
-                            position: 'relative',
-                            width: '100%',
-                            maxWidth: '380px',
-                            aspectRatio: '3/4',
-                            borderRadius: 'var(--radius-md, 8px)',
-                            overflow: 'hidden',
-                            border: isDragging ? '2px solid #4ADE80' : '1px solid var(--border)',
-                            background: '#09090b',
-                            cursor: isDragging ? 'grabbing' : 'grab',
-                            userSelect: 'none',
-                            touchAction: 'none'
-                        }}
-                        onMouseDown={handlePointerDown}
-                        onMouseMove={handlePointerMove}
-                        onMouseUp={handlePointerUp}
-                        onMouseLeave={handlePointerUp}
-                        onTouchStart={handlePointerDown}
-                        onTouchMove={handlePointerMove}
-                        onTouchEnd={handlePointerUp}
-                    >
-                        <canvas
-                            ref={canvasRef}
-                            width={768}
-                            height={1024}
-                            style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
-                        />
+            {garmentList.length > 1 && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {garmentList.map(g => (
+                        <button key={g.category} className={`btn btn-sm ${activeKey === g.category ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { setActiveCategory(g.category); setDragging(false) }}>
+                            {LABELS[g.category] || g.name || g.category}{activeKey === g.category ? ' · Editing' : ' ✓'}
+                        </button>
+                    ))}
+                </div>
+            )}
 
-                        {/* Interactive Drag Hint Overlay */}
-                        <div style={{
-                            position: 'absolute',
-                            top: '10px',
-                            left: '10px',
-                            background: 'rgba(0, 0, 0, 0.75)',
-                            backdropFilter: 'blur(4px)',
-                            padding: '4px 10px',
-                            borderRadius: '20px',
-                            fontSize: '11px',
-                            fontWeight: 500,
-                            color: '#fff',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            pointerEvents: 'none'
-                        }}>
-                            <Move size={12} color="#4ADE80" />
-                            <span>Drag Garment to Move</span>
-                        </div>
-
-                        {!imagesLoaded && (
-                            <div style={{
-                                position: 'absolute',
-                                inset: 0,
-                                background: 'rgba(18, 18, 20, 0.9)',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '8px',
-                                color: 'var(--text-muted)'
-                            }}>
-                                <div className="spinner" style={{ width: '28px', height: '28px', border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%' }} />
-                                <span style={{ fontSize: '12px' }}>Loading Canvas Assets...</span>
-                            </div>
-                        )}
+            {loadError && <div className="alert alert-error">{loadError}</div>}
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 380px) minmax(260px, 1fr)', gap: 18, alignItems: 'start' }}>
+                <div>
+                    <div style={{ position: 'relative', width: '100%', aspectRatio: '3 / 4', overflow: 'hidden', border: '1px solid var(--border)', borderRadius: 12, background: '#101012', cursor: dragging ? 'grabbing' : 'grab', touchAction: 'none' }} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp}>
+                        <canvas ref={canvasRef} width={768} height={1024} style={{ width: '100%', height: '100%', display: 'block' }} />
+                        {!imagesLoaded && !loadError && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--text-secondary)', background: 'rgba(0,0,0,.6)' }}>Loading preview…</div>}
+                        <div style={{ position: 'absolute', left: 10, top: 10, borderRadius: 18, padding: '5px 9px', background: 'rgba(0,0,0,.72)', color: '#fff', fontSize: 11, pointerEvents: 'none' }}><Move size={12} style={{ verticalAlign: 'middle', marginRight: 5 }} />Drag {LABELS[activeKey] || 'garment'} to move</div>
                     </div>
-
-                    {/* Quick Preset Buttons */}
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '380px' }}>
-                        <button onClick={() => applyPreset('upper')} className="btn btn-ghost btn-sm" style={{ fontSize: '11px', padding: '4px 8px' }}>
-                            Upper Body Preset
-                        </button>
-                        <button onClick={() => applyPreset('lower')} className="btn btn-ghost btn-sm" style={{ fontSize: '11px', padding: '4px 8px' }}>
-                            Lower Body Preset
-                        </button>
-                        <button onClick={() => applyPreset('dress')} className="btn btn-ghost btn-sm" style={{ fontSize: '11px', padding: '4px 8px' }}>
-                            Dress Preset
-                        </button>
-                        <button onClick={() => applyPreset('center')} className="btn btn-ghost btn-sm" style={{ fontSize: '11px', padding: '4px 8px' }}>
-                            Center Alignment
-                        </button>
-                    </div>
+                    <button className="btn btn-secondary btn-sm" style={{ width: '100%', marginTop: 9 }} onClick={preset}>Auto-align {LABELS[activeKey] || 'Garment'}</button>
                 </div>
 
-                {/* SLIDERS & FINE CONTROLS PANEL */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', background: 'var(--bg-secondary, #27272a)', padding: '16px', borderRadius: 'var(--radius-md, 8px)', border: '1px solid var(--border)' }}>
-                    
-                    {/* SECTION 1: RESIZE & SCALE */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 15, background: 'var(--bg-secondary)', padding: 16, borderRadius: 12, border: '1px solid var(--border)' }}>
                     <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <Maximize2 size={14} color="var(--accent)" />
-                                <span>Overall Scale ({Math.round(scale * 100)}%)</span>
-                            </label>
-                            <button
-                                onClick={() => setLockAspect(!lockAspect)}
-                                className={`btn btn-sm ${lockAspect ? 'btn-primary' : 'btn-ghost'}`}
-                                style={{ padding: '2px 6px', fontSize: '10px' }}
-                                title={lockAspect ? 'Unlock Width & Height' : 'Lock Aspect Ratio'}
-                            >
-                                {lockAspect ? <Lock size={11} /> : <Unlock size={11} />}
-                                <span>{lockAspect ? 'Locked' : 'Unlocked'}</span>
-                            </button>
-                        </div>
-
-                        <input
-                            type="range"
-                            min="0.3"
-                            max="2.2"
-                            step="0.02"
-                            value={scale}
-                            onChange={(e) => {
-                                const val = parseFloat(e.target.value)
-                                setScale(val)
-                                if (lockAspect) {
-                                    setScaleW(1.0)
-                                    setScaleH(1.0)
-                                }
-                            }}
-                            style={{ width: '100%', accentColor: 'var(--accent)' }}
-                        />
-
-                        {!lockAspect && (
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
-                                <div>
-                                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                                        Width ({Math.round(scaleW * 100)}%)
-                                    </div>
-                                    <input
-                                        type="range"
-                                        min="0.4"
-                                        max="2.0"
-                                        step="0.05"
-                                        value={scaleW}
-                                        onChange={(e) => setScaleW(parseFloat(e.target.value))}
-                                        style={{ width: '100%', accentColor: 'var(--accent)' }}
-                                    />
-                                </div>
-                                <div>
-                                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                                        Height ({Math.round(scaleH * 100)}%)
-                                    </div>
-                                    <input
-                                        type="range"
-                                        min="0.4"
-                                        max="2.0"
-                                        step="0.05"
-                                        value={scaleH}
-                                        onChange={(e) => setScaleH(parseFloat(e.target.value))}
-                                        style={{ width: '100%', accentColor: 'var(--accent)' }}
-                                    />
-                                </div>
-                            </div>
-                        )}
+                        <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 7 }}><span><Maximize2 size={13} style={{ verticalAlign: 'middle', marginRight: 6 }} />Scale</span><strong>{Math.round(current.scale * 100)}%</strong></label>
+                        <input type="range" min="0.45" max="1.65" step="0.01" value={current.scale} onChange={e => updateActive({ scale: Number(e.target.value) })} style={{ width: '100%', accentColor: 'var(--accent)' }} />
                     </div>
-
-                    {/* SECTION 2: POSITION (X & Y) */}
                     <div>
-                        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <Move size={14} color="var(--accent)" />
-                            <span>Position (X: {posX}px, Y: {posY}px)</span>
-                        </div>
-
-                        {/* Fine Step Nudge Controls */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '10px' }}>
-                            <button onClick={() => setPosY(prev => prev - 5)} className="btn btn-secondary btn-sm" style={{ fontSize: '11px', padding: '4px' }}>
-                                <ArrowUp size={12} /> Up
-                            </button>
-                            <button onClick={() => setPosY(prev => prev + 5)} className="btn btn-secondary btn-sm" style={{ fontSize: '11px', padding: '4px' }}>
-                                <ArrowDown size={12} /> Down
-                            </button>
-                            <button onClick={() => setPosX(prev => prev - 5)} className="btn btn-secondary btn-sm" style={{ fontSize: '11px', padding: '4px' }}>
-                                <ArrowLeft size={12} /> Left
-                            </button>
-                            <button onClick={() => setPosX(prev => prev + 5)} className="btn btn-secondary btn-sm" style={{ fontSize: '11px', padding: '4px' }}>
-                                <ArrowRight size={12} /> Right
-                            </button>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <div>
-                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>Horizontal Position (X)</span>
-                                    <span>{posX}px</span>
-                                </div>
-                                <input
-                                    type="range"
-                                    min="-250"
-                                    max="250"
-                                    step="1"
-                                    value={posX}
-                                    onChange={(e) => setPosX(parseInt(e.target.value, 10))}
-                                    style={{ width: '100%', accentColor: 'var(--accent)' }}
-                                />
-                            </div>
-
-                            <div>
-                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>Vertical Position (Y)</span>
-                                    <span>{posY}px</span>
-                                </div>
-                                <input
-                                    type="range"
-                                    min="-250"
-                                    max="250"
-                                    step="1"
-                                    value={posY}
-                                    onChange={(e) => setPosY(parseInt(e.target.value, 10))}
-                                    style={{ width: '100%', accentColor: 'var(--accent)' }}
-                                />
-                            </div>
-                        </div>
+                        <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 7 }}><span><Move size={13} style={{ verticalAlign: 'middle', marginRight: 6 }} />Horizontal position</span><strong>{current.posX}px</strong></label>
+                        <input type="range" min="-280" max="280" step="1" value={current.posX} onChange={e => updateActive({ posX: Number(e.target.value) })} style={{ width: '100%', accentColor: 'var(--accent)' }} />
                     </div>
-
-                    {/* SECTION 3: ROTATION */}
                     <div>
-                        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <RotateCw size={14} color="var(--accent)" />
-                                Rotation ({rotation}°)
-                            </span>
-                            {rotation !== 0 && (
-                                <button onClick={() => setRotation(0)} className="btn btn-ghost btn-sm" style={{ padding: '2px 6px', fontSize: '10px' }}>
-                                    Reset Angle
-                                </button>
-                            )}
+                        <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 7 }}><span>Vertical position</span><strong>{current.posY}px</strong></label>
+                        <input type="range" min="-300" max="300" step="1" value={current.posY} onChange={e => updateActive({ posY: Number(e.target.value) })} style={{ width: '100%', accentColor: 'var(--accent)' }} />
+                        <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+                            <button className="btn btn-secondary btn-sm" onClick={() => updateActive({ posY: current.posY - 5 })}><ArrowUp size={12} /> Up</button>
+                            <button className="btn btn-secondary btn-sm" onClick={() => updateActive({ posY: current.posY + 5 })}><ArrowDown size={12} /> Down</button>
+                            <button className="btn btn-secondary btn-sm" onClick={() => updateActive({ posX: current.posX - 5 })}><ArrowLeft size={12} /> Left</button>
+                            <button className="btn btn-secondary btn-sm" onClick={() => updateActive({ posX: current.posX + 5 })}><ArrowRight size={12} /> Right</button>
                         </div>
-                        <input
-                            type="range"
-                            min="-180"
-                            max="180"
-                            step="1"
-                            value={rotation}
-                            onChange={(e) => setRotation(parseInt(e.target.value, 10))}
-                            style={{ width: '100%', accentColor: 'var(--accent)' }}
-                        />
                     </div>
-
-                    {/* SECTION 4: BACKGROUND KEYING & TRANSPARENCY */}
-                    <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <Scissors size={14} color="var(--accent)" />
-                                <span>Remove White Garment BG</span>
-                            </label>
-                            <input
-                                type="checkbox"
-                                checked={removeWhiteBg}
-                                onChange={(e) => setRemoveWhiteBg(e.target.checked)}
-                                style={{ width: '16px', height: '16px', accentColor: 'var(--accent)', cursor: 'pointer' }}
-                            />
-                        </div>
-
-                        {removeWhiteBg && (
-                            <div>
-                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                    <span>Cutout Sensitivity Threshold</span>
-                                    <span>{bgThreshold}</span>
-                                </div>
-                                <input
-                                    type="range"
-                                    min="180"
-                                    max="255"
-                                    step="1"
-                                    value={bgThreshold}
-                                    onChange={(e) => setBgThreshold(parseInt(e.target.value, 10))}
-                                    style={{ width: '100%', accentColor: 'var(--accent)' }}
-                                />
-                            </div>
-                        )}
+                    <div>
+                        <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 7 }}><span><RotateCw size={13} style={{ verticalAlign: 'middle', marginRight: 6 }} />Rotation</span><strong>{current.rotation}°</strong></label>
+                        <input type="range" min="-30" max="30" step="1" value={current.rotation} onChange={e => updateActive({ rotation: Number(e.target.value) })} style={{ width: '100%', accentColor: 'var(--accent)' }} />
                     </div>
-
+                    <div>
+                        <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 7 }}><span>Opacity</span><strong>{Math.round(current.opacity * 100)}%</strong></label>
+                        <input type="range" min="0.55" max="1" step="0.01" value={current.opacity} onChange={e => updateActive({ opacity: Number(e.target.value) })} style={{ width: '100%', accentColor: 'var(--accent)' }} />
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}><input type="checkbox" checked={removeBackground} onChange={e => setRemoveBackground(e.target.checked)} /> <Scissors size={14} /> Remove garment photo background</label>
                 </div>
             </div>
 
-            {/* Bottom Actions Bar */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
-                {onClose && (
-                    <button onClick={onClose} className="btn btn-secondary">
-                        Cancel
-                    </button>
-                )}
-                <button onClick={handleApplyResult} className="btn btn-primary" style={{ padding: '10px 24px' }}>
-                    <Check size={16} />
-                    <span>Apply Custom Fit & Save Image</span>
-                </button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+                {onClose && <button className="btn btn-secondary" onClick={onClose}>Cancel</button>}
+                <button className="btn btn-primary" onClick={handleApply} disabled={!imagesLoaded || Boolean(loadError)}><Check size={15} /> Apply All Garments</button>
             </div>
-        </div>
+        </section>
     )
 }

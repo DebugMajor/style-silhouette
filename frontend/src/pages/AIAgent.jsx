@@ -14,6 +14,20 @@ import AgentChatInput from '../components/AgentChatInput'
 
 const API = '/api/agent'
 
+
+function formatAgentError(err) {
+    const body = err.response?.data
+    const detail = body?.detail
+    if (Array.isArray(detail)) {
+        return detail.map(item => {
+            const field = Array.isArray(item.loc) ? item.loc.filter(part => part !== 'body').join('.') : ''
+            return field ? `${field}: ${item.msg || 'Invalid value'}` : (item.msg || 'Invalid request')
+        }).join('; ')
+    }
+    if (typeof detail === 'string') return detail
+    return body?.message || body?.error || err.message || 'Request failed.'
+}
+
 // Suggested prompts to help new users get started
 const SUGGESTIONS = [
     { label: '✨ Outfit idea', prompt: 'Give me an outfit idea for a casual day out in summer.' },
@@ -107,16 +121,17 @@ export default function AIAgent() {
 
         try {
             const payload = {
-                message: content,
+                query: content,
                 session_id: sessionId,
-                images: images.map(dataUrl => ({ path: dataUrl })),
+                // The FastAPI ChatRequest expects image data URLs as strings.
+                images,
             }
             const { data } = await axios.post(`${API}/chat`, payload)
 
             const agentMsg = {
                 id: Date.now() + 1,
                 role: 'assistant',
-                content: data?.response || data?.message || 'Done!',
+                content: data?.answer || data?.response || data?.message || 'Done!',
                 images: data?.images || [],
             }
 
@@ -134,7 +149,7 @@ export default function AIAgent() {
                 role: 'assistant',
                 content: err.response?.status === 503
                     ? '⚠️ The AI Agent service is not running. Start the Python agent on port 8000 and try again.'
-                    : `❌ Error: ${err.response?.data?.message || err.message}`,
+                    : `❌ Error: ${formatAgentError(err)}`,
             }
             if (err.response?.status === 503) setAgentDown(true)
             setMessages(prev => [...prev.filter(m => m.id !== 'typing'), errorMsg])

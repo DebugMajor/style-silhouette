@@ -17,8 +17,9 @@ function getAuthHeaders() {
         const stored = localStorage.getItem('sas_user')
         if (stored) {
             const parsed = JSON.parse(stored)
-            if (parsed.token) {
-                return { Authorization: `Bearer ${parsed.token}` }
+            const token = typeof parsed?.token === 'string' ? parsed.token.trim() : ''
+            if (token && token !== 'undefined' && token !== 'null') {
+                return { Authorization: `Bearer ${token}` }
             }
         }
     } catch {}
@@ -118,8 +119,8 @@ export default function AITrend({ hideHeader = false }) {
 
         try {
             const uploadRes = await axios.post('/api/ai-trend/generate-3d', formData, {
+                // Let Axios set the multipart boundary automatically.
                 headers: {
-                    'Content-Type': 'multipart/form-data',
                     ...getAuthHeaders()
                 }
             })

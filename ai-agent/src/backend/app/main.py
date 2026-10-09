@@ -33,7 +33,7 @@ app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -97,3 +97,25 @@ async def vton(req: VTONRequest):
 async def vton_history():
     return {"success": True, "data": vton_history_store}
 
+
+
+# Compatibility endpoints used by the React AI Agent page.
+@app.get("/sessions")
+async def list_sessions():
+    return deps.session_manager.list_sessions()
+
+
+@app.get("/sessions/{session_id}")
+async def get_session_plural(session_id: str):
+    session_data = deps.session_manager.get_session_data(session_id)
+    if session_data is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session_data
+
+
+@app.delete("/sessions/{session_id}")
+async def delete_session(session_id: str):
+    if deps.session_manager.get_session_data(session_id) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    deps.session_manager.cleanup_session(session_id)
+    return {"success": True, "session_id": session_id}

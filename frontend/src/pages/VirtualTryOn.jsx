@@ -1,13 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import axios from 'axios'
-import Avatar3D from '../components/Avatar3D'
 import TryOnAdjuster from '../components/TryOnAdjuster'
 import {
     Camera,
     Check,
     Download,
-    Layers,
     Move,
     RefreshCw,
     Save,
@@ -20,30 +18,30 @@ import {
 const API_TRYON = '/api/agent/vton'
 const API_HISTORY = '/api/agent/vton/history'
 
-function fileToDataUrl(file) {
+function fileToDataUrl(file, preserveTransparency = false) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = () => {
             const img = new Image()
             img.onload = () => {
                 const maxDim = 1200
-                let width = img.width
-                let height = img.height
+                let width = img.naturalWidth || img.width
+                let height = img.naturalHeight || img.height
                 if (width > maxDim || height > maxDim) {
-                    if (width > height) {
-                        height = Math.round((height * maxDim) / width)
-                        width = maxDim
-                    } else {
-                        width = Math.round((width * maxDim) / height)
-                        height = maxDim
-                    }
+                    const ratio = maxDim / Math.max(width, height)
+                    width = Math.round(width * ratio)
+                    height = Math.round(height * ratio)
                 }
                 const canvas = document.createElement('canvas')
                 canvas.width = width
                 canvas.height = height
                 const ctx = canvas.getContext('2d')
+                ctx.clearRect(0, 0, width, height)
                 ctx.drawImage(img, 0, 0, width, height)
-                resolve(canvas.toDataURL('image/jpeg', 0.85))
+                // Keep transparent garment backgrounds as PNG. Model photos are compressed as JPEG to save memory.
+                resolve(preserveTransparency
+                    ? canvas.toDataURL('image/png')
+                    : canvas.toDataURL('image/jpeg', 0.85))
             }
             img.onerror = () => resolve(reader.result)
             img.src = reader.result
@@ -54,10 +52,12 @@ function fileToDataUrl(file) {
 }
 
 export default function VirtualTryOn() {
-    const navigate = useNavigate()
-    const [mode, setMode] = useState('IDM-VTON')
+    const location = useLocation()
     const [modelImage, setModelImage] = useState(null)
     const [clothingImage, setClothingImage] = useState(null)
+    // Keep a separate garment for each slot so Upper and Lower can be combined.
+    const [garmentsByCategory, setGarmentsByCategory] = useState({ upper_body: null, lower_body: null, dresses: null })
+    const [garmentTransforms, setGarmentTransforms] = useState({})
     const [garmentName, setGarmentName] = useState('')
     const [category, setCategory] = useState('upper_body')
     const [resultImage, setResultImage] = useState(null)
@@ -65,7 +65,6 @@ export default function VirtualTryOn() {
     const [processing, setProcessing] = useState(false)
     const [saving, setSaving] = useState(false)
     const [status, setStatus] = useState(null)
-    const [threeView, setThreeView] = useState('Front')
     const [history, setHistory] = useState([])
 
     const [cameraOpen, setCameraOpen] = useState(false)
@@ -76,6 +75,48 @@ export default function VirtualTryOn() {
     const clothingInputRef = useRef(null)
 
     const message = (text, type = 'info') => setStatus({ text, type })
+
+    // Prefill one or two selected items from My Wardrobe. Upper + Lower are kept together.
+    useEffect(() => {
+        let items = Array.isArray(location.state?.wardrobeItems) ? location.state.wardrobeItems : []
+        if (!items.length && location.state?.wardrobeItem) items = [location.state.wardrobeItem]
+        if (!items.length) {
+            const encodedItem = new URLSearchParams(location.search).get('item')
+            if (encodedItem) {
+                try { items = [JSON.parse(encodedItem)] }
+                catch (error) { console.warn('[Wardrobe Try-On] Could not parse selected item:', error) }
+            }
+        }
+        items = items.filter(item => item && typeof item === 'object' && item.imageSrc)
+        if (!items.length) return
+
+        const slotFor = (item) => {
+            const description = `${item.name || ''} ${item.category || ''}`.toLowerCase()
+            if (/\b(dress|gown|jumpsuit|romper)\b/.test(description)) return 'dresses'
+            if (/\b(jeans?|trousers?|pants?|shorts?|skirt|leggings?|bottoms?|chinos?|shoes?|sneakers?|boots?|sandals?)\b/.test(description) || /\bbottoms\b/.test(String(item.category || '').toLowerCase())) return 'lower_body'
+            return 'upper_body'
+        }
+        const slots = { upper_body: null, lower_body: null, dresses: null }
+        for (const item of items) {
+            const slot = slotFor(item)
+            slots[slot] = { image: item.imageSrc, name: item.name || 'Wardrobe garment', category: slot }
+        }
+        // If a dress is selected, treat it as the complete outfit and don't layer tops/bottoms over it.
+        if (slots.dresses) {
+            slots.upper_body = null
+            slots.lower_body = null
+        }
+        const active = slots.upper_body || slots.lower_body || slots.dresses
+        setGarmentsByCategory(slots)
+        setCategory(active.category)
+        setClothingImage(active.image)
+        setGarmentName(active.name)
+        setGarmentTransforms({})
+        setResultImage(null)
+        setIsAdjusting(false)
+        message(`Loaded ${Object.values(slots).filter(Boolean).length} wardrobe item(s) from My Wardrobe. Upload or capture your model photo to continue.`, 'info')
+    }, [location.key, location.search, location.state])
+
 
     useEffect(() => {
         return () => {
@@ -113,13 +154,18 @@ export default function VirtualTryOn() {
         }
 
         try {
-            const dataUrl = await fileToDataUrl(file)
+            const dataUrl = await fileToDataUrl(file, type === 'clothing')
 
             if (type === 'model') {
                 setModelImage(dataUrl)
             } else {
+                const uploadedName = file.name.replace(/\.[^/.]+$/, '')
                 setClothingImage(dataUrl)
-                setGarmentName(file.name.replace(/\.[^/.]+$/, ''))
+                setGarmentName(uploadedName)
+                setGarmentsByCategory(prev => ({
+                    ...prev,
+                    [category]: { image: dataUrl, name: uploadedName, category }
+                }))
             }
 
             setResultImage(null)
@@ -175,36 +221,248 @@ export default function VirtualTryOn() {
         message('Model photo captured from camera.', 'success')
     }
 
-function generateClientSideTryOn(modelImgUrl, clothingImgUrl) {
-    return new Promise((resolve) => {
-        const modelImg = new Image()
-        const clothingImg = new Image()
-        let loaded = 0
-        const onLoaded = () => {
-            loaded++
-            if (loaded === 2) {
-                const canvas = document.createElement('canvas')
-                canvas.width = modelImg.width || 720
-                canvas.height = modelImg.height || 960
-                const ctx = canvas.getContext('2d')
-                ctx.drawImage(modelImg, 0, 0, canvas.width, canvas.height)
+function generateClientSideTryOn(modelImgUrl, clothingImgUrl, garmentCategory = 'upper_body') {
+    // Approximate local 2D composition fallback. Transparent wardrobe cutouts are
+    // preserved; uniform white photo backgrounds are removed only when connected to edges.
+    return new Promise((resolve, reject) => {
+        const loadImage = (src) => new Promise((resolveImage, rejectImage) => {
+            const image = new Image()
+            image.onload = () => resolveImage(image)
+            image.onerror = () => rejectImage(new Error('Unable to load the model or garment image.'))
+            if (/^https?:\/\//i.test(src)) image.crossOrigin = 'anonymous'
+            image.src = src
+        })
 
-                const gw = canvas.width * 0.55
-                const gh = canvas.height * 0.45
-                const gx = (canvas.width - gw) / 2
-                const gy = canvas.height * 0.25
-                ctx.drawImage(clothingImg, gx, gy, gw, gh)
-                resolve(canvas.toDataURL('image/jpeg', 0.9))
-            }
-        }
-        modelImg.onload = onLoaded
-        clothingImg.onload = onLoaded
-        modelImg.onerror = () => resolve(modelImgUrl)
-        clothingImg.onerror = () => resolve(modelImgUrl)
-        modelImg.src = modelImgUrl
-        clothingImg.src = clothingImgUrl
+        Promise.all([loadImage(modelImgUrl), loadImage(clothingImgUrl)])
+            .then(([modelImg, clothingImg]) => {
+                const width = modelImg.naturalWidth || modelImg.width || 720
+                const height = modelImg.naturalHeight || modelImg.height || 960
+                const output = document.createElement('canvas')
+                output.width = width
+                output.height = height
+                const outCtx = output.getContext('2d')
+                if (!outCtx) throw new Error('Canvas is unavailable in this browser.')
+                outCtx.drawImage(modelImg, 0, 0, width, height)
+
+                const garmentCanvas = document.createElement('canvas')
+                garmentCanvas.width = clothingImg.naturalWidth || clothingImg.width
+                garmentCanvas.height = clothingImg.naturalHeight || clothingImg.height
+                const garmentCtx = garmentCanvas.getContext('2d', { willReadFrequently: true })
+                if (!garmentCtx) throw new Error('Canvas is unavailable in this browser.')
+                garmentCtx.drawImage(clothingImg, 0, 0, garmentCanvas.width, garmentCanvas.height)
+
+                try {
+                    const w = garmentCanvas.width
+                    const h = garmentCanvas.height
+                    const imageData = garmentCtx.getImageData(0, 0, w, h)
+                    const pixels = imageData.data
+                    const corners = [[0,0], [w-1,0], [0,h-1], [w-1,h-1]]
+                    const hasExistingTransparency = corners.some(([x,y]) => pixels[(y*w+x)*4+3] < 250)
+                    if (!hasExistingTransparency) {
+                        // Only remove an edge-connected near-white background; do not erase
+                        // similarly coloured pixels inside a white/cream garment.
+                        const samples = corners.map(([x,y]) => {
+                            const i = (y*w+x)*4
+                            return [pixels[i], pixels[i+1], pixels[i+2], pixels[i+3]]
+                        }).filter(c => c[3] > 250 && Math.min(c[0],c[1],c[2]) >= 220 && Math.max(c[0],c[1],c[2])-Math.min(c[0],c[1],c[2]) < 28)
+                        if (samples.length) {
+                            const ref = samples[0]
+                            const nearBackground = (p) => {
+                                const i = p*4
+                                return pixels[i+3] > 0 &&
+                                    pixels[i] >= 218 && pixels[i+1] >= 218 && pixels[i+2] >= 218 &&
+                                    Math.abs(pixels[i]-ref[0]) <= 44 &&
+                                    Math.abs(pixels[i+1]-ref[1]) <= 44 &&
+                                    Math.abs(pixels[i+2]-ref[2]) <= 44
+                            }
+                            const queue = new Int32Array(w*h)
+                            let head = 0, tail = 0
+                            const visit = (x,y) => {
+                                if (x<0 || y<0 || x>=w || y>=h) return
+                                const p = y*w+x, ai = p*4+3
+                                if (pixels[ai] === 0 || !nearBackground(p)) return
+                                pixels[ai] = 0
+                                queue[tail++] = p
+                            }
+                            for (let x=0; x<w; x++) { visit(x,0); visit(x,h-1) }
+                            for (let y=1; y<h-1; y++) { visit(0,y); visit(w-1,y) }
+                            while (head<tail) {
+                                const p = queue[head++], x=p%w, y=Math.floor(p/w)
+                                visit(x-1,y); visit(x+1,y); visit(x,y-1); visit(x,y+1)
+                            }
+                            garmentCtx.putImageData(imageData,0,0)
+                        }
+                    }
+                } catch (backgroundError) {
+                    console.warn('[Try-On] Preserving source background because cutout processing failed:', backgroundError.message)
+                }
+
+                const pixels = garmentCtx.getImageData(0, 0, garmentCanvas.width, garmentCanvas.height).data
+                let minX=garmentCanvas.width, minY=garmentCanvas.height, maxX=-1, maxY=-1
+                for (let y=0; y<garmentCanvas.height; y++) {
+                    for (let x=0; x<garmentCanvas.width; x++) {
+                        if (pixels[(y*garmentCanvas.width+x)*4+3] > 12) {
+                            if (x<minX) minX=x
+                            if (x>maxX) maxX=x
+                            if (y<minY) minY=y
+                            if (y>maxY) maxY=y
+                        }
+                    }
+                }
+                if (maxX < minX || maxY < minY) throw new Error('The garment image appears empty after background removal.')
+                const pad = Math.max(1, Math.round(Math.min(maxX-minX+1, maxY-minY+1)*0.01))
+                minX=Math.max(0,minX-pad); minY=Math.max(0,minY-pad)
+                maxX=Math.min(garmentCanvas.width-1,maxX+pad); maxY=Math.min(garmentCanvas.height-1,maxY+pad)
+                const cropW=maxX-minX+1, cropH=maxY-minY+1
+
+                let region
+                if (garmentCategory === 'lower_body') {
+                    region = { x: width*0.29, y: height*0.465, w: width*0.42, h: height*0.50 }
+                } else if (garmentCategory === 'dresses') {
+                    region = { x: width*0.23, y: height*0.20, w: width*0.54, h: height*0.73 }
+                } else {
+                    region = { x: width*0.23, y: height*0.195, w: width*0.54, h: height*0.34 }
+                }
+                const fit = Math.min(region.w/cropW, region.h/cropH)
+                const drawW=cropW*fit, drawH=cropH*fit
+                const drawX=region.x+(region.w-drawW)/2
+                const drawY=region.y+(region.h-drawH)/2
+                outCtx.drawImage(garmentCanvas,minX,minY,cropW,cropH,drawX,drawY,drawW,drawH)
+                resolve(output.toDataURL('image/png'))
+            })
+            .catch(reject)
     })
 }
+
+    // Local multi-item preview. This is an approximate 2D overlay, not a photorealistic VTON model.
+    const generateClientSideMultiTryOn = async (modelImgUrl, garments, transforms = {}) => {
+        const loadImage = (src) => new Promise((resolve, reject) => {
+            const image = new Image()
+            image.crossOrigin = 'anonymous'
+            image.onload = () => resolve(image)
+            image.onerror = () => reject(new Error('Could not load one of the try-on images.'))
+            image.src = src
+        })
+
+        const modelImg = await loadImage(modelImgUrl)
+        const canvas = document.createElement('canvas')
+        canvas.width = modelImg.naturalWidth || modelImg.width || 720
+        canvas.height = modelImg.naturalHeight || modelImg.height || 960
+        const ctx = canvas.getContext('2d')
+        if (!ctx) throw new Error('Canvas is unavailable in this browser.')
+        ctx.drawImage(modelImg, 0, 0, canvas.width, canvas.height)
+
+        // Draw bottoms first so an upper garment can overlap the waistband naturally.
+        const order = { lower_body: 0, upper_body: 1, dresses: 2 }
+        const orderedGarments = [...garments].sort((a, b) => (order[a.category] ?? 1) - (order[b.category] ?? 1))
+
+        for (const garment of orderedGarments) {
+            const sourceImg = await loadImage(garment.image)
+            const maxDim = 720
+            const factor = Math.min(1, maxDim / Math.max(sourceImg.naturalWidth || sourceImg.width, sourceImg.naturalHeight || sourceImg.height))
+            const gw = Math.max(1, Math.round((sourceImg.naturalWidth || sourceImg.width) * factor))
+            const gh = Math.max(1, Math.round((sourceImg.naturalHeight || sourceImg.height) * factor))
+            const cutout = document.createElement('canvas')
+            cutout.width = gw
+            cutout.height = gh
+            const gctx = cutout.getContext('2d', { willReadFrequently: true })
+            if (!gctx) continue
+            gctx.drawImage(sourceImg, 0, 0, gw, gh)
+
+            // Remove a uniform, light background only when it is connected to the image edge.
+            // This helps keep a white/cream shirt's interior intact.
+            try {
+                const imageData = gctx.getImageData(0, 0, gw, gh)
+                const pixels = imageData.data
+                const samplePoints = [[0, 0], [gw - 1, 0], [0, gh - 1], [gw - 1, gh - 1]]
+                let br = 0, bg = 0, bb = 0
+                for (const [sx, sy] of samplePoints) {
+                    const i = (sy * gw + sx) * 4
+                    br += pixels[i]; bg += pixels[i + 1]; bb += pixels[i + 2]
+                }
+                br = Math.round(br / 4); bg = Math.round(bg / 4); bb = Math.round(bb / 4)
+                const backgroundIsLight = (br + bg + bb) / 3 > 155 && Math.max(br, bg, bb) - Math.min(br, bg, bb) < 80
+                if (backgroundIsLight) {
+                    const total = gw * gh
+                    const visited = new Uint8Array(total)
+                    const queue = new Int32Array(total)
+                    let head = 0, tail = 0
+                    const isBackground = (p) => {
+                        const i = p * 4
+                        if (pixels[i + 3] === 0) return true
+                        const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2]
+                        const brightness = (r + g + b) / 3
+                        const delta = Math.abs(r - br) + Math.abs(g - bg) + Math.abs(b - bb)
+                        return brightness > 145 && delta < 108
+                    }
+                    const add = (p) => {
+                        if (p >= 0 && p < total && !visited[p] && isBackground(p)) {
+                            visited[p] = 1
+                            queue[tail++] = p
+                        }
+                    }
+                    for (let x = 0; x < gw; x++) { add(x); add((gh - 1) * gw + x) }
+                    for (let y = 0; y < gh; y++) { add(y * gw); add(y * gw + gw - 1) }
+                    while (head < tail) {
+                        const p = queue[head++]
+                        pixels[p * 4 + 3] = 0
+                        const x = p % gw, y = (p / gw) | 0
+                        if (x > 0) add(p - 1)
+                        if (x < gw - 1) add(p + 1)
+                        if (y > 0) add(p - gw)
+                        if (y < gh - 1) add(p + gw)
+                    }
+                    gctx.putImageData(imageData, 0, 0)
+                }
+            } catch (error) {
+                // Cross-origin photos may block pixel access; draw the image as-is in that case.
+                console.warn('[TryOn] Background cleanup skipped:', error?.message || error)
+            }
+
+            const W = canvas.width, H = canvas.height
+            let box
+            if (garment.category === 'lower_body') {
+                box = { x: W * 0.245, y: H * 0.455, w: W * 0.51, h: H * 0.49 }
+            } else if (garment.category === 'dresses') {
+                box = { x: W * 0.205, y: H * 0.205, w: W * 0.59, h: H * 0.735 }
+            } else {
+                box = { x: W * 0.19, y: H * 0.215, w: W * 0.62, h: H * 0.30 }
+            }
+            const aspect = gw / gh
+            let drawW = box.w
+            let drawH = drawW / aspect
+            if (drawH > box.h) { drawH = box.h; drawW = drawH * aspect }
+            const x = box.x + (box.w - drawW) / 2
+            const y = box.y + (box.h - drawH) / 2
+            const t = { posX: 0, posY: 0, scale: 1, scaleW: 1, scaleH: 1, rotation: 0, opacity: 1, ...(transforms[garment.category] || {}) }
+            const finalW = drawW * t.scale * t.scaleW
+            const finalH = drawH * t.scale * t.scaleH
+            ctx.save()
+            ctx.globalAlpha = Math.max(0, Math.min(1, t.opacity))
+            ctx.translate(x + drawW / 2 + t.posX, y + drawH / 2 + t.posY)
+            ctx.rotate((t.rotation * Math.PI) / 180)
+            ctx.drawImage(cutout, -finalW / 2, -finalH / 2, finalW, finalH)
+            ctx.restore()
+        }
+        return canvas.toDataURL('image/jpeg', 0.92)
+    }
+
+    const getSelectedGarments = () => {
+        const byCategory = { ...(garmentsByCategory || {}) }
+        if (clothingImage) {
+            byCategory[category] = {
+                ...(byCategory[category] || {}),
+                image: clothingImage,
+                name: garmentName || byCategory[category]?.name || 'Uploaded garment',
+                category,
+            }
+        }
+        let selected = Object.entries(byCategory)
+            .filter(([, item]) => Boolean(item?.image))
+            .map(([itemCategory, item]) => ({ ...item, category: itemCategory }))
+        if (selected.some(item => item.category === 'dresses')) selected = [selected.find(item => item.category === 'dresses')]
+        return selected
+    }
 
     const generateTryOn = async () => {
         if (!modelImage) {
@@ -212,43 +470,61 @@ function generateClientSideTryOn(modelImgUrl, clothingImgUrl) {
             return
         }
 
-        if (!clothingImage) {
-            message('Upload a clothing photo first.', 'error')
+        let selectedGarments = getSelectedGarments()
+
+        if (!selectedGarments.length) {
+            message('Upload at least one garment. You can add both an Upper and a Lower item before generating.', 'error')
             return
+        }
+
+        // A dress is a full-body garment; if selected, use it on its own.
+        if (selectedGarments.some(item => item.category === 'dresses')) {
+            selectedGarments = [selectedGarments.find(item => item.category === 'dresses')]
         }
 
         setProcessing(true)
         setResultImage(null)
-        message('AI Agent is generating your virtual try-on…', 'info')
+        message(selectedGarments.length > 1
+            ? 'Combining your upper and lower garments in the preview…'
+            : 'Generating your virtual try-on…', 'info')
 
         try {
-            const response = await axios.post(
-                API_TRYON,
-                {
-                    model_image: modelImage,
-                    clothing_image: clothingImage,
-                    category,
-                    garment_description: garmentName || 'fashion clothing'
-                },
-                { timeout: 8000 }
-            )
-
-            const result = response.data?.result_image || response.data?.resultImage
-            if (!result) {
-                throw new Error(response.data?.message || 'Agent did not return a result image.')
+            // The connected API accepts one garment per request, so multiple categories use the
+            // local category-aware compositor rather than silently ignoring one selected item.
+            if (selectedGarments.length > 1) {
+                const combined = await generateClientSideMultiTryOn(modelImage, selectedGarments, garmentTransforms)
+                setResultImage(combined)
+                message('Upper and Lower garments are both shown. This is a local 2D preview, not AI-generated fabric fitting.', 'success')
+                return
             }
 
-            setResultImage(result)
-            message('Virtual Try-On completed successfully.', 'success')
-            loadHistory()
-        } catch {
+            const garment = selectedGarments[0]
             try {
-                const fallbackResult = await generateClientSideTryOn(modelImage, clothingImage)
-                setResultImage(fallbackResult)
-                message('Virtual Try-On generated successfully!', 'success')
-            } catch {
-                message('Virtual Try-On generation failed.', 'error')
+                const response = await axios.post(
+                    API_TRYON,
+                    {
+                        model_image: modelImage,
+                        clothing_image: garment.image,
+                        category: garment.category,
+                        garment_description: garment.name || 'fashion clothing'
+                    },
+                    { timeout: 8000 }
+                )
+
+                const result = response.data?.result_image || response.data?.resultImage
+                if (!result) throw new Error(response.data?.message || 'Agent did not return a result image.')
+                setResultImage(result)
+                message('Virtual Try-On completed successfully.', 'success')
+                loadHistory()
+            } catch (apiError) {
+                console.warn('[TryOn] Live single-garment try-on unavailable; showing local preview:', apiError?.message || apiError)
+                const localResult = await generateClientSideMultiTryOn(modelImage, [garment], garmentTransforms)
+                setResultImage(localResult)
+                message('Preview created with category-aware garment placement. Live AI fitting was unavailable; this is an approximate 2D overlay.', 'info')
             }
+        } catch (error) {
+            console.error('[TryOn] Preview generation failed:', error)
+            message(error?.message || 'Virtual Try-On preview could not be generated.', 'error')
         } finally {
             setProcessing(false)
         }
@@ -293,11 +569,15 @@ function generateClientSideTryOn(modelImgUrl, clothingImgUrl) {
     const clearSession = () => {
         setModelImage(null)
         setClothingImage(null)
+        setGarmentsByCategory({ upper_body: null, lower_body: null, dresses: null })
+        setCategory('upper_body')
         setGarmentName('')
         setResultImage(null)
         setStatus(null)
         setIsAdjusting(false)
     }
+
+    const editorGarments = useMemo(() => getSelectedGarments(), [garmentsByCategory, clothingImage, garmentName, category])
 
     return (
         <main style={{ maxWidth: 1320, margin: '0 auto', padding: '32px 28px 60px' }}>
@@ -315,22 +595,6 @@ function generateClientSideTryOn(modelImgUrl, clothingImgUrl) {
                         </p>
                     </div>
 
-                    <div style={{ display: 'flex', gap: 8 }}>
-                        <button
-                            className={`btn btn-sm ${mode === 'IDM-VTON' ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => setMode('IDM-VTON')}
-                        >
-                            <Sparkles size={15} />
-                            AI Photo Try-On
-                        </button>
-                        <button
-                            className={`btn btn-sm ${mode === '3D' ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => setMode('3D')}
-                        >
-                            <Layers size={15} />
-                            3D Try-On
-                        </button>
-                    </div>
                 </div>
             </header>
 
@@ -340,7 +604,6 @@ function generateClientSideTryOn(modelImgUrl, clothingImgUrl) {
                 </div>
             )}
 
-            {mode === 'IDM-VTON' ? (
                 <>
                     {/* CUSTOM RESIZE AND MOVE INTERACTIVE EDITOR */}
                     {isAdjusting && modelImage && clothingImage && (
@@ -349,10 +612,13 @@ function generateClientSideTryOn(modelImgUrl, clothingImgUrl) {
                                 modelPhoto={modelImage}
                                 clothingPhoto={clothingImage}
                                 category={category}
-                                onApply={(newImage) => {
+                                garments={editorGarments}
+                                initialTransforms={garmentTransforms}
+                                onApply={(newImage, updatedTransforms) => {
                                     setResultImage(newImage)
+                                    setGarmentTransforms(updatedTransforms || {})
                                     setIsAdjusting(false)
-                                    message('Custom position & scale applied to Try-On result!', 'success')
+                                    message('Fit adjustments applied. All selected garments are preserved.', 'success')
                                 }}
                                 onClose={() => setIsAdjusting(false)}
                             />
@@ -455,16 +721,42 @@ function generateClientSideTryOn(modelImgUrl, clothingImgUrl) {
                                         ['upper_body', 'Upper'],
                                         ['lower_body', 'Lower'],
                                         ['dresses', 'Dress']
-                                    ].map(([id, label]) => (
-                                        <button
-                                            key={id}
-                                            className={`btn btn-sm ${category === id ? 'btn-primary' : 'btn-secondary'}`}
-                                            onClick={() => setCategory(id)}
-                                        >
-                                            {label}
-                                        </button>
-                                    ))}
+                                    ].map(([id, label]) => {
+                                        const hasGarment = id === category
+                                            ? Boolean(clothingImage || garmentsByCategory[id]?.image)
+                                            : Boolean(garmentsByCategory[id]?.image)
+                                        return (
+                                            <button
+                                                key={id}
+                                                className={`btn btn-sm ${category === id ? 'btn-primary' : 'btn-secondary'}`}
+                                                onClick={() => {
+                                                    if (id === category) return
+                                                    // Save the current slot first (including a garment loaded from Wardrobe).
+                                                    if (clothingImage) {
+                                                        setGarmentsByCategory(prev => ({
+                                                            ...prev,
+                                                            [category]: {
+                                                                image: clothingImage,
+                                                                name: garmentName || prev[category]?.name || 'Uploaded garment',
+                                                                category
+                                                            }
+                                                        }))
+                                                    }
+                                                    const nextGarment = garmentsByCategory[id]
+                                                    setCategory(id)
+                                                    setClothingImage(nextGarment?.image || null)
+                                                    setGarmentName(nextGarment?.name || '')
+                                                    setResultImage(null)
+                                                }}
+                                            >
+                                                {label}{hasGarment ? ' ✓' : ''}
+                                            </button>
+                                        )
+                                    })}
                                 </div>
+                                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '7px 0 0', lineHeight: 1.45 }}>
+                                    Upload an item for Upper, then switch to Lower and upload another. Both slots stay selected for a combined preview.
+                                </p>
                             </div>
 
                             <div style={{
@@ -521,7 +813,7 @@ function generateClientSideTryOn(modelImgUrl, clothingImgUrl) {
                                 <button
                                     className="btn btn-secondary"
                                     onClick={() => setIsAdjusting(true)}
-                                    disabled={!modelImage || !clothingImage}
+                                    disabled={!modelImage || getSelectedGarments().length === 0}
                                     title="Custom resize & move garment position"
                                     style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                                 >
@@ -600,38 +892,6 @@ function generateClientSideTryOn(modelImgUrl, clothingImgUrl) {
                         </section>
                     )}
                 </>
-            ) : (
-                <section className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid var(--border)', gap: 10, flexWrap: 'wrap' }}>
-                        <div>
-                            <div style={{ fontWeight: 700 }}>3D Try-On</div>
-                            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                                Use your existing 3D avatar, or generate an AI avatar in AI Trend.
-                            </div>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {['Front', 'Back', 'Left', 'Right', 'Reset'].map(view => (
-                                <button
-                                    key={view}
-                                    className={`btn btn-sm ${threeView === view ? 'btn-primary' : 'btn-secondary'}`}
-                                    onClick={() => setThreeView(view)}
-                                >
-                                    {view}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <Avatar3D activeView={threeView} />
-
-                    <div style={{ padding: 16, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end' }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => navigate('/dashboard/ai-trend')}>
-                            Open AI Trend
-                        </button>
-                    </div>
-                </section>
-            )}
 
             {cameraOpen && (
                 <div style={{

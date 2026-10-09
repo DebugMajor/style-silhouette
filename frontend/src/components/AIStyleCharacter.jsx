@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react'
 import { AlertCircle } from 'lucide-react'
 
-const AIStyleCharacter = forwardRef(({ state = 'IDLE', activeText = '', onSpeechEnd }, ref) => {
+const AIStyleCharacter = forwardRef(({ state = 'IDLE', activeText = '', onSpeechEnd, imageSrc = null }, ref) => {
     const [characterState, setCharacterState] = useState(state) // IDLE | LISTENING | THINKING | SPEAKING | PAUSED
     const [audioUrl, setAudioUrl] = useState(null)
     const [isPlaying, setIsPlaying] = useState(false)
@@ -222,12 +222,13 @@ const AIStyleCharacter = forwardRef(({ state = 'IDLE', activeText = '', onSpeech
 
                 {/* Character Image */}
                 <img
-                    src="/assets/ai-stylist.png"
-                    alt="AI Fashion Stylist"
+                    src={imageSrc || "/assets/ai-stylist.png"}
+                    alt={imageSrc ? "Your captured outfit" : "AI Fashion Stylist"}
                     style={{
                         width: '100%',
                         height: '100%',
-                        objectFit: 'cover',
+                        objectFit: imageSrc ? 'contain' : 'cover',
+                        background: imageSrc ? 'rgba(0, 0, 0, 0.35)' : 'transparent',
                         borderRadius: '12px',
                         filter: characterState === 'SPEAKING' ? 'drop-shadow(0 0 16px rgba(220,20,60,0.5))' : 'drop-shadow(0 0 8px rgba(0,0,0,0.5))',
                         transform: characterState === 'SPEAKING' ? 'scale(1.02) translateY(-4px)' :

@@ -45,17 +45,58 @@ export default function Voice() {
 
     const startCamera = async () => {
         setCameraError(null)
+        let stream
+
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
-            })
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream
+            if (!navigator.mediaDevices?.getUserMedia) {
+                throw new Error('Camera access requires localhost or HTTPS.')
             }
+
+            const video = videoRef.current
+            const existingStream = video?.srcObject
+            const hasLiveVideo = existingStream?.getVideoTracks().some(
+                track => track.readyState === 'live'
+            )
+
+            if (video && hasLiveVideo) {
+                setCapturedImage(null)
+                setCameraOn(true)
+                await video.play()
+                return
+            }
+
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    facingMode: 'user'
+                },
+                audio: false
+            })
+
+            if (!video) {
+                throw new Error('Camera preview is unavailable.')
+            }
+
+            video.srcObject = stream
+            setCapturedImage(null)
             setCameraOn(true)
+            await video.play()
         } catch (err) {
-            console.error('[Camera] Access denied or error:', err)
-            setCameraError('Camera access is required for live style analysis.')
+            stream?.getTracks().forEach(track => track.stop())
+
+            if (videoRef.current?.srcObject === stream) {
+                videoRef.current.srcObject = null
+            }
+
+            console.error('[Camera] Access or playback failed:', err)
+            if (err.name === 'NotAllowedError') {
+                setCameraError('Camera permission was denied. Allow camera access in your browser settings.')
+            } else if (err.name === 'NotFoundError') {
+                setCameraError('No camera was found on this device.')
+            } else {
+                setCameraError(err.message || 'Unable to start the camera.')
+            }
             setCameraOn(false)
         }
     }
@@ -76,8 +117,24 @@ export default function Voice() {
     }, [])
 
     const handleFileUpload = (e) => {
-        const file = e.target.files?.[0]
+        const input = e.currentTarget
+        const file = input.files?.[0]
+        input.value = ''
         if (!file) return
+
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+        if (!allowedTypes.includes(file.type)) {
+            setCameraError('Please upload a JPG, PNG, or WebP image.')
+            return
+        }
+
+        if (file.size > 10 * 1024 * 1024) {
+            setCameraError('Please upload an image smaller than 10 MB.')
+            return
+        }
+
+        setCameraError(null)
+        stopCamera()
         setCapturedImage(URL.createObjectURL(file))
         runAnalysisOnBlob(file)
     }
@@ -85,56 +142,86 @@ export default function Voice() {
     const captureAndAnalyze = () => {
         const video = videoRef.current
         const canvas = canvasRef.current
-        if (!video || !canvas) return
 
-        canvas.width = video.videoWidth || 640
-        canvas.height = video.videoHeight || 480
+        if (!video || !canvas) {
+            setCameraError('Camera preview is not ready. Restart the camera and try again.')
+            return
+        }
+
+        if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+            setCameraError('The camera is still starting. Wait a moment and try again.')
+            return
+        }
+
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
 
         const ctx = canvas.getContext('2d')
+        if (!ctx) {
+            setCameraError('Unable to capture a camera frame in this browser.')
+            return
+        }
+
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
 
         canvas.toBlob((blob) => {
-            if (!blob) return
-            setCapturedImage(canvas.toDataURL('image/jpeg'))
+            if (!blob) {
+                setCameraError('Could not capture the image. Please try again.')
+                return
+            }
+            setCameraError(null)
+            setCapturedImage(canvas.toDataURL('image/jpeg', 0.9))
             runAnalysisOnBlob(blob)
         }, 'image/jpeg', 0.9)
     }
 
     const runAnalysisOnBlob = async (imageBlob) => {
-        setIsAnalyzing(true)
-        setCharacterState('THINKING')
-        setCharacterText('Analyzing your visible outfit and style proportions...')
+        if (!imageBlob) {
+            setCameraError('No camera or uploaded image was provided.');
+            return;
+        }
 
-        const formData = new FormData()
-        formData.append('image', imageBlob, 'capture.jpg')
-        formData.append('occasion', selectedOccasion)
+        setCameraError(null);
+        setAnalysisResult(null);
+        setIsAnalyzing(true);
+        setCharacterState('THINKING');
+        setCharacterText('Analyzing the image shown in the left Camera Feed...');
+
+        const formData = new FormData();
+        formData.append('image', imageBlob, imageBlob.name || 'user-outfit.jpg');
+        formData.append('occasion', selectedOccasion);
 
         try {
+            // The only image sent to the server is this camera capture or selected upload.
             const res = await axios.post('/api/style-speaker/analyze', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                    ...getAuthHeaders()
-                }
-            })
+                headers: getAuthHeaders(),
+            });
 
-            const analysis = res.data?.analysis
-            if (analysis) {
-                setAnalysisResult(analysis)
-                const speechAdvice = analysis.spokenResponse || analysis.outfitSummary
-                setCharacterText(speechAdvice)
-                setMessages(prev => [...prev, { sender: 'AI', text: speechAdvice }])
-
-                fetchElevenLabsSpeech(speechAdvice)
+            const analysis = res.data?.analysis;
+            if (!analysis || (!analysis.outfitSummary && !analysis.spokenResponse)) {
+                throw new Error('The vision service returned no image-specific analysis.');
             }
+
+            setAnalysisResult(analysis);
+            const speechAdvice = analysis.spokenResponse || analysis.outfitSummary;
+            setCharacterText(speechAdvice);
+            setCharacterState('IDLE');
+            setMessages(prev => [...prev, { sender: 'AI', text: speechAdvice }]);
+            fetchElevenLabsSpeech(speechAdvice);
         } catch (err) {
-            console.error('[Voice] Analysis failed:', err)
-            const fallbackText = "I've inspected your outfit! The color combination looks balanced. Try pairing with neutral footwear."
-            setCharacterText(fallbackText)
-            fetchElevenLabsSpeech(fallbackText)
+            console.error('[Voice] Image analysis failed:', err);
+            const message = err.response?.data?.message || err.message || 'Unknown error';
+            setCameraError(`Image analysis failed: ${message}`);
+            setCharacterState('IDLE');
+            setCharacterText('I could not analyze that image. Check the error shown beneath the Camera Feed.');
+            setMessages(prev => [...prev, {
+                sender: 'AI',
+                text: `I could not analyze the image you supplied. ${message}`,
+            }]);
         } finally {
-            setIsAnalyzing(false)
+            setIsAnalyzing(false);
         }
-    }
+    };
 
     const fetchElevenLabsSpeech = async (textToSpeak) => {
         if (!textToSpeak) return
@@ -279,7 +366,34 @@ export default function Voice() {
                             overflow: 'hidden', border: '1px solid var(--border)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center'
                         }}>
-                            {!cameraOn && !capturedImage ? (
+                            <video
+                                ref={videoRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'cover',
+                                    display: cameraOn && !capturedImage ? 'block' : 'none'
+                                }}
+                            />
+
+                            {capturedImage ? (
+                                <img
+                                    src={capturedImage}
+                                    alt="Captured or uploaded outfit"
+                                    style={{
+                                        position: 'absolute',
+                                        inset: 0,
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'contain'
+                                    }}
+                                />
+                            ) : !cameraOn ? (
                                 <div style={{ textAlign: 'center', padding: '24px' }}>
                                     <div style={{ width: '48px', height: '48px', borderRadius: 'var(--radius-md)', background: 'var(--accent-dim)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
                                         <Camera size={24} />
@@ -295,12 +409,7 @@ export default function Voice() {
                                         <span>Start Camera</span>
                                     </button>
                                 </div>
-                            ) : capturedImage ? (
-                                <img src={capturedImage} alt="Captured frame" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                            ) : (
-                                <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            )}
-
+                            ) : null}
                             <canvas ref={canvasRef} style={{ display: 'none' }} />
                         </div>
 
@@ -335,7 +444,7 @@ export default function Voice() {
                         <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
                             <Upload size={14} />
                             <span>Upload</span>
-                            <input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
+                            <input type="file" accept=".jpg,.jpeg,.png,.webp" onChange={handleFileUpload} style={{ display: 'none' }} />
                         </label>
                     </div>
                 </div>
@@ -346,6 +455,7 @@ export default function Voice() {
                         ref={characterRef}
                         state={characterState}
                         activeText={characterText}
+                        imageSrc={capturedImage}
                     />
                 </div>
             </div>
