@@ -5,3 +5,7 @@ dist
 uploads
 venv/
 .DS_Store
+
+# Editor backups may contain credentials
+.env~
+*.env~
