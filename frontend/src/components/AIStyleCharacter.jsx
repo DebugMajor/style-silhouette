@@ -227,8 +227,8 @@ const AIStyleCharacter = forwardRef(({ state = 'IDLE', activeText = '', onSpeech
                     style={{
                         width: '100%',
                         height: '100%',
-                        objectFit: 'contain',
-                        borderRadius: '8px',
+                        objectFit: 'cover',
+                        borderRadius: '12px',
                         filter: characterState === 'SPEAKING' ? 'drop-shadow(0 0 16px rgba(220,20,60,0.5))' : 'drop-shadow(0 0 8px rgba(0,0,0,0.5))',
                         transform: characterState === 'SPEAKING' ? 'scale(1.02) translateY(-4px)' :
                                    characterState === 'THINKING' ? 'translateY(-2px)' : 'translateY(0)',
