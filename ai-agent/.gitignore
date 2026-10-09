@@ -1,0 +1,25 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+.vscode
+
+
+# credentials
+openai_api_key.txt
+.env
+
+notebooks/
+qdrant_storage/
+scraper/
+examples/
+
+# data
+data/ctl
+data/uniqlo_scraper

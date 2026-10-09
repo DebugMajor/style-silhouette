@@ -17,12 +17,37 @@ import {
     X
 } from 'lucide-react'
 
-const API_ROOT = '/api/virtual-tryon'
+const API_TRYON = '/api/agent/vton'
+const API_HISTORY = '/api/agent/vton/history'
 
 function fileToDataUrl(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader()
-        reader.onload = () => resolve(reader.result)
+        reader.onload = () => {
+            const img = new Image()
+            img.onload = () => {
+                const maxDim = 1200
+                let width = img.width
+                let height = img.height
+                if (width > maxDim || height > maxDim) {
+                    if (width > height) {
+                        height = Math.round((height * maxDim) / width)
+                        width = maxDim
+                    } else {
+                        width = Math.round((width * maxDim) / height)
+                        height = maxDim
+                    }
+                }
+                const canvas = document.createElement('canvas')
+                canvas.width = width
+                canvas.height = height
+                const ctx = canvas.getContext('2d')
+                ctx.drawImage(img, 0, 0, width, height)
+                resolve(canvas.toDataURL('image/jpeg', 0.85))
+            }
+            img.onerror = () => resolve(reader.result)
+            img.src = reader.result
+        }
         reader.onerror = reject
         reader.readAsDataURL(file)
     })
@@ -62,8 +87,8 @@ export default function VirtualTryOn() {
 
     const loadHistory = async () => {
         try {
-            const response = await axios.get(`${API_ROOT}/history`)
-            setHistory(response.data?.data || [])
+            const response = await axios.get(API_HISTORY)
+            setHistory(response.data?.data || response.data || [])
         } catch {
             setHistory([])
         }
@@ -163,28 +188,31 @@ export default function VirtualTryOn() {
 
         setProcessing(true)
         setResultImage(null)
-        message('IDM-VTON is generating your try-on. This can take a little while.', 'info')
+        message('AI Agent is generating your virtual try-on…', 'info')
 
         try {
-            const response = await axios.post(`${API_ROOT}/process`, {
-                modelImage,
-                clothingImage,
+            const response = await axios.post(API_TRYON, {
+                model_image: modelImage,
+                clothing_image: clothingImage,
                 category,
-                garmentDescription: garmentName || 'fashion clothing'
+                garment_description: garmentName || 'fashion clothing'
             })
 
-            if (!response.data?.success || !response.data?.resultImage) {
-                throw new Error(response.data?.message || 'IDM-VTON did not return a result.')
+            const result = response.data?.result_image || response.data?.resultImage
+            if (!result) {
+                throw new Error(response.data?.message || 'Agent did not return a result image.')
             }
 
-            setResultImage(response.data.resultImage)
-            message('Virtual Try-On completed.', 'success')
+            setResultImage(result)
+            message('Virtual Try-On completed by AI Agent.', 'success')
             loadHistory()
         } catch (error) {
+            const msg = error?.response?.data?.message || error?.message || 'Agent try-on failed.'
+            const isOffline = error?.response?.status === 503
             message(
-                error?.response?.data?.message ||
-                error?.message ||
-                'IDM-VTON failed to generate the try-on.',
+                isOffline
+                    ? '⚠️ AI Agent offline. Start the Python server on port 8000.'
+                    : msg,
                 'error'
             )
         } finally {
@@ -208,8 +236,8 @@ export default function VirtualTryOn() {
         setSaving(true)
 
         try {
-            await axios.post(`${API_ROOT}/save`, {
-                title: garmentName ? `Try-On: ${garmentName}` : 'AI Virtual Try-On',
+            await axios.post(`${API_HISTORY}/save`, {
+                title: garmentName ? `Try-On: ${garmentName}` : 'AI Agent Virtual Try-On',
                 baseImage: modelImage,
                 clothingItems: [{
                     name: garmentName || 'Uploaded Garment',
@@ -249,7 +277,7 @@ export default function VirtualTryOn() {
                             Virtual Try-On
                         </h1>
                         <p style={{ margin: 0, color: 'var(--text-secondary)', maxWidth: 700 }}>
-                            Upload your photo and a garment. IDM-VTON automatically renders the garment on the person.
+                            Upload your photo and a garment. The AI Agent generates the garment on the person using its built-in VTON tool.
                         </p>
                     </div>
 

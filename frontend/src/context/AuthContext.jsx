@@ -8,6 +8,25 @@ axios.defaults.withCredentials = true
 
 const AuthContext = createContext(null)
 
+// ── Axios 401 Interceptor for automatic stale token handling ───
+axios.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+        if (error.response && error.response.status === 401) {
+            localStorage.removeItem('sas_user')
+            delete axios.defaults.headers.common['Authorization']
+            if (error.config && !error.config._retry) {
+                error.config._retry = true
+                if (error.config.headers) {
+                    delete error.config.headers['Authorization']
+                }
+                return axios(error.config)
+            }
+        }
+        return Promise.reject(error)
+    }
+)
+
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null)
     const [loading, setLoading] = useState(true)

@@ -204,29 +204,41 @@ Sanjay Suthar
 
 Narayan Hari Singh
 
-AI Trend
---------
-Photo-to-3D Avatar using Tripo AI.
+AI Agent (fashion-recommender)
+------------------------------
+An AI-powered multi-tool LangGraph agent that adds:
+- Conversational fashion recommendations
+- Multimodal RAG (wardrobe retrieval via CLIP + Qdrant)
+- Internet fashion search
+- Virtual try-on via agent tool
+- Session management
+
+Prerequisites:
+- Python 3.12+
+- Docker & Docker Compose (for Qdrant vector database)
+- uv package manager: https://github.com/astral-sh/uv
+- API Keys: OpenAI, Google (Gemini), LangSmith
 
 Setup:
-1. Create Tripo API key at https://platform.tripo3d.ai/
-2. Create `backend/.env` (from `backend/.env.example`)
-3. Add:
-   TRIPO_API_KEY=your_key_here
-4. Start backend (`cd backend && npm start`).
-5. Start frontend (`cd frontend && npm run dev`).
-6. Open AI Trend (`/dashboard/ai-trend`).
-7. Upload full-body image.
-8. Generate 3D avatar.
+1. Copy env file:
+   cd ai-agent
+   copy .env.example .env
+2. Add your keys to ai-agent/.env:
+   OPENAI_API_KEY=your_key
+   GOOGLE_API_KEY=your_key
+   LANGSMITH_API_KEY=your_key
+   QDRANT_URL=http://localhost:6333
+3. Start Qdrant (Docker):
+   cd ai-agent && docker-compose up -d
+4. Install Python deps:
+   cd ai-agent && uv sync
+5. Start the Python agent:
+   cd ai-agent && uv run uvicorn src.backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+6. Start the Node.js backend:
+   cd backend && npm start
+7. Start the React frontend:
+   cd frontend && npm run dev
+8. Open /dashboard/agent in your browser.
 
-Project Vision
-
-The long-term goal of Style-A-Silhouette is to evolve into a complete smart wardrobe ecosystem powered by:
-
-Cloud computing
-
-Computer vision
-
-AI-driven personalization
-
-Helping users make smarter and more confident fashion choices.
+The Node.js backend proxies /api/agent/* to the Python FastAPI agent at http://localhost:8000.
+Virtual try-on (/dashboard/virtual-try-on) now routes through the agent's VTON tool.

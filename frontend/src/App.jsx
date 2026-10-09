@@ -14,6 +14,7 @@ import Suggestions from './pages/Suggestions'
 import Voice from './pages/Voice'
 import VirtualTryOn from './pages/VirtualTryOn'
 import AITrend from './pages/AITrend'
+import AIAgent from './pages/AIAgent'
 
 /* ── Protected route guard ──────────────────────────────── */
 function PrivateRoute({ children }) {
@@ -54,6 +55,7 @@ export default function App() {
                     <Route path="voice" element={<Voice />} />
                     <Route path="virtual-try-on" element={<VirtualTryOn />} />
                     <Route path="ai-trend" element={<Navigate to="/dashboard/suggestions?tab=ai-trend" replace />} />
+                    <Route path="agent" element={<AIAgent />} />
                 </Route>
 
                 <Route path="/ai-trend" element={<Navigate to="/dashboard/suggestions?tab=ai-trend" replace />} />

@@ -13,7 +13,8 @@ import {
     Grid,
     CheckCircle2,
     Clock,
-    Plus
+    Plus,
+    Bot
 } from 'lucide-react'
 
 export default function Dashboard() {
@@ -61,9 +62,9 @@ export default function Dashboard() {
 
     const recentActivities = [
         { title: 'Style analysis', date: 'Today', type: 'Camera Scan' },
-        { title: 'Virtual try-on', date: 'Yesterday', type: 'IDM-VTON' },
+        { title: 'AI Agent chat', date: 'Today', type: 'LangGraph Agent' },
+        { title: 'Virtual try-on', date: 'Yesterday', type: 'Agent VTON' },
         { title: 'Added clothing', date: '2 days ago', type: 'Digital Wardrobe' },
-        { title: 'AI trend explored', date: '3 days ago', type: 'Trend Studio' },
     ]
 
     const wardrobePreviewImages = [
@@ -332,6 +333,53 @@ export default function Dashboard() {
                             }}
                         >
                             <span>Talk to Stylist</span>
+                            <ArrowRight size={14} />
+                        </button>
+                    </div>
+
+                    {/* Card 4: AI AGENT */}
+                    <div style={{
+                        backgroundColor: 'var(--bg-card)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        padding: '24px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justify: 'space-between',
+                        minHeight: '200px',
+                        background: 'linear-gradient(135deg, var(--bg-card) 80%, rgba(139,92,246,0.08))',
+                        boxShadow: '0 0 0 1px rgba(139,92,246,0.25)'
+                    }}>
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                                <Bot size={20} color="#a855f7" />
+                                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>AI AGENT</h3>
+                                <span style={{ fontSize: '0.65rem', fontWeight: 700, background: 'rgba(168,85,247,0.15)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.3)', borderRadius: 20, padding: '2px 8px', letterSpacing: '.08em', textTransform: 'uppercase' }}>NEW</span>
+                            </div>
+                            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                                Multi-tool AI agent: wardrobe RAG, web search, virtual try-on, and fashion recommendations — all in one conversational interface.
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => navigate('/dashboard/agent')}
+                            style={{
+                                backgroundColor: '#a855f7',
+                                color: '#fff',
+                                border: '1px solid #a855f7',
+                                padding: '10px 16px',
+                                borderRadius: 'var(--radius-sm)',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px',
+                                marginTop: '20px'
+                            }}
+                        >
+                            <Bot size={14} />
+                            <span>Open AI Agent</span>
                             <ArrowRight size={14} />
                         </button>
                     </div>

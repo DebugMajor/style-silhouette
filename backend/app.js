@@ -11,9 +11,9 @@ const authRoutes = require('./routes/authRoutes')
 const analyzeRoutes = require('./routes/analyzeRoutes')
 const aiRoutes = require('./routes/aiRoutes')
 const cameraRoutes = require('./routes/cameraRoutes')
-const virtualTryOnRoutes = require('./routes/virtualTryOnRoutes')
 const aiTrendRoutes = require('./routes/aiTrendRoutes')
 const styleSpeakerRoutes = require('./routes/styleSpeakerRoutes')
+const agentRoutes = require('./routes/agentRoutes')
 
 // ── Connect to MongoDB ────────────────────────────────────
 connectDB()
@@ -28,8 +28,8 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization'],
 }))
 
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
+app.use(express.json({ limit: '100mb' }))
+app.use(express.urlencoded({ limit: '100mb', extended: true }))
 
 if (process.env.NODE_ENV === 'development') {
     app.use(morgan('dev'))
@@ -43,9 +43,9 @@ app.use('/api/auth', authRoutes)
 app.use('/api/analyze', analyzeRoutes)
 app.use('/api/ai', aiRoutes)
 app.use('/api/camera', cameraRoutes)
-app.use('/api/virtual-tryon', virtualTryOnRoutes)
 app.use('/api/ai-trend', aiTrendRoutes)
 app.use('/api/style-speaker', styleSpeakerRoutes)
+app.use('/api/agent', agentRoutes)     // ← Python FastAPI agent proxy
 
 // ── Health check ──────────────────────────────────────────
 app.get('/api/health', (req, res) => {

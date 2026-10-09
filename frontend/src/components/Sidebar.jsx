@@ -11,7 +11,8 @@ import {
     Camera,
     Upload,
     Settings,
-    LogOut
+    LogOut,
+    Bot
 } from 'lucide-react'
 
 export default function Sidebar() {
@@ -32,6 +33,7 @@ export default function Sidebar() {
                 { icon: Sparkles, label: 'AI Style', to: '/dashboard/suggestions' },
                 { icon: TrendingUp, label: 'AI Trends', to: '/dashboard/suggestions?tab=ai-trend' },
                 { icon: MessageCircle, label: 'AI Stylist', to: '/dashboard/voice' },
+                { icon: Bot, label: 'AI Agent', to: '/dashboard/agent' },
             ]
         },
         {
