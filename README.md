@@ -198,11 +198,7 @@ Contributors
 
 Shashwat Dhondyal
 
-Tejaswini Rath
-
-Sanjay Suthar
-
-Narayan Hari Singh
+Sanjay Sutar
 
 Project Vision
 
